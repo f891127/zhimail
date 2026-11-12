@@ -1,0 +1,57 @@
+{
+  "name": "zhimail",
+  "productName": "ZhiMail",
+  "version": "1.0.0",
+  "private": true,
+  "description": "知邮 ZhiMail —— Foxmail 风格桌面邮件客户端，内置 AI 汇总、邮件简报与待办提取能力",
+  "author": "房秀杰",
+  "license": "MIT",
+  "main": "dist-electron/main.js",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build:renderer": "vite build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build": "pnpm build:renderer && pnpm build:electron",
+    "start": "electron .",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "test": "node --test tests/",
+    "screenshot": "node scripts/screenshot.mjs",
+    "dist:win": "pnpm build && electron-builder --win nsis --x64",
+    "dist:zip": "pnpm build && electron-builder --win zip --x64"
+  },
+  "dependencies": {
+    "docx": "^9.15.3",
+    "electron-updater": "^6.8.11",
+    "html-to-text": "^9.0.5",
+    "iconv-lite": "^0.6.3",
+    "imapflow": "^1.0.164",
+    "mailparser": "^3.7.1",
+    "nodemailer": "^6.9.16"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/nodemailer": "^6.4.16",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "date-fns": "^4.1.0",
+    "dompurify": "^3.2.2",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "marked": "^14.1.3",
+    "postcss": "^8.4.49",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "zustand": "^5.0.1"
+  }
+}

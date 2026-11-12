@@ -1,0 +1,380 @@
+/** 阅读窗格：邮件头信息、AI 操作条、正文渲染、附件与会话上下文 */
+
+import { useEffect, useMemo, useState } from 'react';
+import { useAppStore } from '@/store/useAppStore';
+import { Icon } from '@/components/Icon';
+import { addressLabel, fileSize, fullTime, senderName } from '@/lib/format';
+import { buildMailDocument, renderMarkdown, textToHtml } from '@/lib/markdown';
+import { api } from '@/lib/api';
+import type { MessageMeta } from '@/types/zhimail';
+
+function EmptyReading() {
+  const store = useAppStore();
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 bg-white px-10 text-center">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100 text-brand-500">
+        <Icon name="mail" size={30} strokeWidth={1.3} />
+      </div>
+      <h2 className="text-base font-semibold text-shell-text">选择一封邮件开始阅读</h2>
+      <p className="max-w-[320px] text-xs leading-5 text-shell-faint">
+        选中邮件后，可在此阅读正文、查看附件，并使用 AI 生成摘要、会话串摘要、回复建议与待办事项。
+      </p>
+      <div className="mt-1 flex gap-2">
+        <button type="button" className="ghost-btn" onClick={() => store.setAIPanel(true, 'analysis')}>
+          <Icon name="sparkles" size={13} className="text-brand-500" />
+          打开 AI 汇总分析
+        </button>
+        <button type="button" className="ghost-btn" onClick={() => store.setView('briefs')}>
+          <Icon name="document" size={13} />
+          查看邮件简报
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function ReadingPane() {
+  const store = useAppStore();
+  const { selectedMessage, selectedMessageId, aiOutputs, aiBusy } = store;
+  const [threadMessages, setThreadMessages] = useState<MessageMeta[]>([]);
+  const [showThread, setShowThread] = useState(false);
+  const [showAllRecipients, setShowAllRecipients] = useState(false);
+
+  useEffect(() => {
+    setShowThread(false);
+    setShowAllRecipients(false);
+    if (selectedMessage?.threadId) {
+      void api.messages.thread(selectedMessage.threadId).then(setThreadMessages);
+    } else {
+      setThreadMessages([]);
+    }
+  }, [selectedMessage?.threadId, selectedMessageId]);
+
+  const htmlDoc = useMemo(() => {
+    if (!selectedMessage) return '';
+    const html = selectedMessage.body.html;
+    if (html) return buildMailDocument(html);
+    const text = selectedMessage.body.text ?? selectedMessage.snippet ?? '';
+    return buildMailDocument(textToHtml(text || '（此邮件没有正文内容）'));
+  }, [selectedMessage]);
+
+  const summary = aiOutputs.message?.id === selectedMessageId ? aiOutputs.message.markdown : null;
+  const triage = aiOutputs.triage?.id === selectedMessageId ? aiOutputs.triage.result : null;
+  const translation = aiOutputs.translate?.id === selectedMessageId ? aiOutputs.translate : null;
+  const showTranslation = store.translationVisible && Boolean(translation);
+  const flagged = selectedMessage?.flags.includes('\\Flagged') ?? false;
+
+  if (!selectedMessage) return <EmptyReading />;
+
+  return (
+    <div className="flex h-full min-w-0 flex-col bg-white">
+      {/* 主题与操作 */}
+      <div className="shrink-0 border-b border-shell-line px-4 pt-3">
+        <div className="flex items-start gap-3">
+          <h1 className="min-w-0 flex-1 text-base font-semibold leading-6 text-shell-text">
+            {selectedMessage.subject || '(无主题)'}
+            {selectedMessage.hasAttachments && (
+              <Icon name="paperclip" size={13} className="ml-1.5 inline text-shell-faint" />
+            )}
+          </h1>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              className={`tool-btn ${flagged ? 'text-accent-500' : ''}`}
+              onClick={() => void store.toggleFlag([selectedMessage.id], '\\Flagged', !flagged)}
+              title="星标"
+            >
+              <Icon name={flagged ? 'star-filled' : 'star'} size={14} />
+            </button>
+            <button
+              type="button"
+              className="tool-btn"
+              onClick={() => void store.toggleFlag([selectedMessage.id], '\\Seen', !selectedMessage.flags.includes('\\Seen'))}
+              title={selectedMessage.flags.includes('\\Seen') ? '标记为未读' : '标记为已读'}
+            >
+              <Icon name="mail" size={14} />
+            </button>
+            <button
+              type="button"
+              className="tool-btn"
+              onClick={() => void store.deleteMessages([selectedMessage.id])}
+              title="删除"
+            >
+              <Icon name="trash" size={14} />
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-2 flex items-start gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-xs font-semibold text-white">
+            {senderName(selectedMessage.from).slice(0, 1)}
+          </div>
+          <div className="min-w-0 flex-1 text-xs leading-5">
+            <div className="flex items-baseline gap-1.5">
+              <span className="shrink-0 whitespace-nowrap font-semibold text-shell-text">
+                {senderName(selectedMessage.from)}
+              </span>
+              <span className="truncate text-[11px] text-shell-faint">
+                &lt;{selectedMessage.from[0]?.address}&gt;
+              </span>
+              <span className="ml-auto shrink-0 text-[11px] tabular-nums text-shell-faint">
+                {fullTime(selectedMessage.date)}
+              </span>
+            </div>
+            <div className="text-[11px] text-shell-sub">
+              收件人：{addressLabel(selectedMessage.to)}
+              {selectedMessage.cc.length > 0 && (
+                <>
+                  <span className="mx-1 text-shell-line">|</span>
+                  抄送：
+                  {showAllRecipients ? addressLabel(selectedMessage.cc) : `${selectedMessage.cc.length} 人`}
+                </>
+              )}
+              {selectedMessage.cc.length > 0 && (
+                <button
+                  type="button"
+                  className="ml-1 text-brand-600 hover:underline"
+                  onClick={() => setShowAllRecipients((value) => !value)}
+                >
+                  {showAllRecipients ? '收起' : '展开'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* AI 操作条 */}
+        <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-shell-lineSoft py-1.5">
+          <button type="button" className="tool-btn" onClick={() => store.replyToMessage('reply')}>
+            <Icon name="reply" size={13} /> 回复
+          </button>
+          <button type="button" className="tool-btn" onClick={() => store.replyToMessage('replyAll')}>
+            <Icon name="reply-all" size={13} /> 全部
+          </button>
+          <button type="button" className="tool-btn" onClick={() => store.replyToMessage('forward')}>
+            <Icon name="forward" size={13} /> 转发
+          </button>
+          <div className="mx-0.5 h-3.5 w-px bg-shell-lineSoft" />
+          <button
+            type="button"
+            className="tool-btn text-brand-600"
+            disabled={aiBusy}
+            onClick={() => void store.runSummarize(selectedMessage.id)}
+          >
+            <Icon name="sparkles" size={13} /> AI 摘要
+          </button>
+          <button
+            type="button"
+            className="tool-btn text-brand-600"
+            disabled={aiBusy}
+            onClick={() => void store.runThreadSummary(selectedMessage.threadId)}
+            title="生成整个会话串的摘要"
+          >
+            <Icon name="document" size={13} />
+          </button>
+          <button
+            type="button"
+            className="tool-btn text-brand-600"
+            disabled={aiBusy}
+            onClick={() => void store.runReplies(selectedMessage.id)}
+            title="一键生成 3 条回复草稿"
+          >
+            <Icon name="send" size={13} />
+          </button>
+          <button
+            type="button"
+            className="tool-btn"
+            disabled={aiBusy}
+            onClick={() => void store.runTriage(selectedMessage.id)}
+            title="判断重要度与紧急度"
+          >
+            <Icon name="shield" size={13} />
+          </button>
+          <button
+            type="button"
+            className="tool-btn"
+            disabled={aiBusy}
+            onClick={() => void store.runTranslate(selectedMessage.id, '中文')}
+            title="一键翻译为中文"
+          >
+            <Icon name="translate" size={13} />
+            译中
+          </button>
+          <button
+            type="button"
+            className="tool-btn"
+            disabled={aiBusy}
+            onClick={() => void store.runTranslate(selectedMessage.id, 'English')}
+            title="一键翻译为英文"
+          >
+            译英
+          </button>
+          <button
+            type="button"
+            className="tool-btn"
+            disabled={aiBusy}
+            onClick={() => void store.extractTodosFromMessage(selectedMessage.id)}
+            title="从本邮件提取待办事项"
+          >
+            <Icon name="checklist" size={13} />
+          </button>
+        </div>
+      </div>
+
+      {/* 重要度提示 */}
+      {triage && (
+        <div className="flex shrink-0 items-start gap-2 border-b border-brand-100 bg-brand-50/50 px-4 py-1.5 text-[11px] text-brand-800">
+          <Icon name="shield" size={12} className="mt-[2px] text-brand-600" />
+          <span>
+            重要度 <b>{triage.importance === 'high' ? '高' : triage.importance === 'low' ? '低' : '中'}</b>
+            ，紧急度 <b>{triage.urgency === 'high' ? '高' : triage.urgency === 'low' ? '低' : '中'}</b>：
+            {triage.reason}
+            {triage.labels.length > 0 && (
+              <span className="ml-1">
+                {triage.labels.map((label) => (
+                  <span key={label} className="ml-1 rounded bg-white px-1 py-[1px] text-[10px] text-brand-700">
+                    {label}
+                  </span>
+                ))}
+              </span>
+            )}
+          </span>
+        </div>
+      )}
+
+      {/* 会话上下文 */}
+      {threadMessages.length > 1 && (
+        <div className="shrink-0 border-b border-shell-lineSoft bg-[#fafbfc]">
+          <button
+            type="button"
+            className="flex w-full items-center gap-1.5 px-4 py-1.5 text-[11px] text-shell-sub hover:text-brand-600"
+            onClick={() => setShowThread((value) => !value)}
+          >
+            <Icon name={showThread ? 'chevron-down' : 'chevron-right'} size={11} />
+            本会话共 {threadMessages.length} 封邮件
+            <span className="ml-auto flex items-center gap-1 text-brand-600">
+              <Icon name="sparkles" size={11} />
+              一键生成会话摘要
+            </span>
+          </button>
+          {showThread && (
+            <div className="max-h-[132px] overflow-y-auto border-t border-shell-lineSoft bg-white">
+              {threadMessages.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => void store.selectMessage(item.id)}
+                  className={`flex w-full items-center gap-2 px-4 py-1.5 text-left text-[11px] transition-colors duration-120 hover:bg-brand-50 ${
+                    item.id === selectedMessage.id ? 'bg-brand-50/70' : ''
+                  }`}
+                >
+                  <span className="w-[92px] shrink-0 truncate text-shell-sub">{senderName(item.from)}</span>
+                  <span className="min-w-0 flex-1 truncate text-shell-text">{item.subject}</span>
+                  <span className="shrink-0 tabular-nums text-shell-faint">{fullTime(item.date).slice(5, 16)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 正文 */}
+      {showTranslation && translation && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-brand-100 bg-brand-50 px-4 py-1 text-[11px] text-brand-800">
+          <Icon name="translate" size={12} className="text-brand-600" />
+          <span className="min-w-0 flex-1 truncate whitespace-nowrap">
+            已翻译为{translation.target}
+            <span className="ml-1 text-brand-600/70">
+              （{translation.engine === 'builtin' ? '内置免费引擎' : '大模型'}）
+            </span>
+            {translation.subject && (
+              <span className="ml-2 text-shell-sub">主题：{translation.subject}</span>
+            )}
+          </span>
+          <button
+            type="button"
+            className="shrink-0 whitespace-nowrap text-brand-700 hover:underline"
+            onClick={() => store.setTranslationVisible(false)}
+          >
+            显示原文
+          </button>
+        </div>
+      )}
+
+      <div className="min-h-0 flex-1">
+        {showTranslation && translation ? (
+          <div className="scroll-area h-full bg-white px-5 py-4">
+            <div className="mx-auto max-w-[760px] text-sm leading-[1.85] text-shell-text" style={{ userSelect: 'text' }}>
+              {translation.text.split(/\n{2,}/).map((paragraph, index) => (
+                <p key={index} className="mb-3 whitespace-pre-wrap">
+                  {paragraph}
+                </p>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <iframe
+            key={`${selectedMessage.id}-${htmlDoc.length}`}
+            title="邮件正文"
+            srcDoc={htmlDoc}
+            sandbox={IFRAME_SANDBOX}
+            className="h-full w-full border-0 bg-white"
+          />
+        )}
+      </div>
+
+      {/* 附件 */}
+      {selectedMessage.body.attachments.length > 0 && (
+        <div className="shrink-0 border-t border-shell-line bg-[#fafbfc] px-4 py-2">
+          <div className="mb-1 flex items-center gap-1 text-[11px] font-medium text-shell-sub">
+            <Icon name="paperclip" size={11} />
+            附件（{selectedMessage.body.attachments.length}）
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {selectedMessage.body.attachments.map((attachment) => (
+              <button
+                key={`${attachment.index}-${attachment.filename}`}
+                type="button"
+                onClick={() => attachment.localPath && void api.system.openPath(attachment.localPath)}
+                className="flex items-center gap-1.5 rounded border border-shell-line bg-white px-2 py-1 text-[11px] text-shell-text transition-colors duration-120 hover:border-brand-300 hover:text-brand-600"
+                title={attachment.localPath ?? '附件尚未下载'}
+              >
+                <Icon name="document" size={12} className="text-brand-500" />
+                <span className="max-w-[180px] truncate">{attachment.filename}</span>
+                <span className="text-shell-faint">{fileSize(attachment.size)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 内联摘要卡片 */}
+      {summary && (
+        <div className="max-h-[38%] shrink-0 overflow-y-auto border-t border-brand-100 bg-gradient-to-b from-brand-50/70 to-white px-4 py-2.5">
+          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-brand-700">
+            <Icon name="sparkles" size={12} />
+            AI 摘要
+            <button
+              type="button"
+              className="ml-auto text-[10px] font-normal text-shell-faint hover:text-brand-600"
+              onClick={() => store.setAIOutput('message', null)}
+            >
+              收起
+            </button>
+          </div>
+          <div
+            className="md-body text-[12.5px]"
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(summary) }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+/**
+ * 邮件正文在 iframe 中渲染。默认启用沙箱（不给 allow-same-origin），
+ * 使恶意邮件脚本无法访问应用上下文；仅在截图构建中放开，
+ * 因为 Electron 的 capturePage 无法截取沙箱 iframe 的合成层。
+ */
+const IFRAME_SANDBOX =
+  import.meta.env.VITE_SCREENSHOT === '1' ? undefined : 'allow-popups allow-popups-to-escape-sandbox';

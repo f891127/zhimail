@@ -1,0 +1,203 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    @apply bg-shell-bg text-shell-text font-ui text-sm antialiased;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+
+  ::selection {
+    background: #d7e7fa;
+    color: #123a6e;
+  }
+
+  input,
+  textarea {
+    user-select: text;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #c9cfd6 transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #c9cfd6;
+    border-radius: 5px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #aeb6c0;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  .chrome-btn {
+    @apply inline-flex items-center gap-1.5 rounded px-2 py-[5px] text-xs text-shell-sub transition-colors duration-120 hover:bg-black/5 hover:text-shell-text active:bg-black/10 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .chrome-btn-active {
+    @apply bg-brand-50 text-brand-700;
+  }
+
+  .tool-btn {
+    @apply inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs text-shell-text transition-colors duration-120 hover:bg-black/[0.06] active:bg-black/10 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .primary-btn {
+    @apply inline-flex items-center gap-1.5 rounded bg-brand-500 px-3 py-1.5 text-xs font-medium text-white transition-colors duration-120 hover:bg-brand-600 active:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .ghost-btn {
+    @apply inline-flex items-center gap-1.5 rounded border border-shell-line bg-white px-2.5 py-1.5 text-xs text-shell-text transition-colors duration-120 hover:border-brand-300 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .field {
+    @apply w-full rounded border border-shell-line bg-white px-2.5 py-[7px] text-xs text-shell-text outline-none transition-colors duration-120 placeholder:text-shell-faint focus:border-brand-400 focus:ring-2 focus:ring-brand-100;
+  }
+
+  .field-label {
+    @apply mb-1 block text-2xs font-medium text-shell-sub;
+  }
+
+  .badge {
+    @apply inline-flex min-w-[16px] items-center justify-center rounded-full px-1.5 py-[1px] text-[10px] font-semibold leading-[14px];
+  }
+
+  .card {
+    @apply rounded-md border border-shell-lineSoft bg-white shadow-pane;
+  }
+
+  .section-title {
+    @apply flex items-center gap-2 px-3 pt-3 pb-1.5 text-2xs font-semibold uppercase tracking-wide text-shell-faint;
+  }
+
+  .md-body {
+    @apply text-sm leading-[1.75] text-shell-text;
+  }
+
+  .md-body h1 {
+    @apply mb-2 mt-1 text-lg font-semibold text-brand-800;
+  }
+
+  .md-body h2 {
+    @apply mb-2 mt-4 flex items-center gap-1.5 border-l-[3px] border-brand-500 pl-2 text-[15px] font-semibold text-brand-800;
+  }
+
+  .md-body h3 {
+    @apply mb-1.5 mt-3 text-sm font-semibold text-shell-text;
+  }
+
+  .md-body p {
+    @apply my-1.5;
+  }
+
+  .md-body ul {
+    @apply my-1.5 list-disc space-y-1 pl-5;
+  }
+
+  .md-body ol {
+    @apply my-1.5 list-decimal space-y-1 pl-5;
+  }
+
+  .md-body strong {
+    @apply font-semibold text-shell-text;
+  }
+
+  .md-body a {
+    @apply text-brand-600 underline decoration-brand-200 underline-offset-2;
+  }
+
+  .md-body code {
+    @apply rounded bg-shell-chrome px-1 py-[1px] font-mono text-[12px];
+  }
+
+  .md-body pre {
+    @apply my-2 overflow-auto rounded bg-shell-chrome p-2 font-mono text-[12px];
+  }
+
+  .md-body table {
+    @apply my-2 w-full border-collapse text-xs;
+  }
+
+  .md-body th {
+    @apply border border-shell-line bg-brand-50 px-2 py-1.5 text-left font-semibold text-brand-800;
+  }
+
+  .md-body td {
+    @apply border border-shell-line px-2 py-1.5 align-top;
+  }
+
+  .md-body blockquote {
+    @apply my-2 border-l-[3px] border-brand-200 bg-shell-bg px-3 py-1.5 text-shell-sub;
+  }
+
+  .md-body hr {
+    @apply my-3 border-t border-shell-lineSoft;
+  }
+
+  /* 窄面板中的紧凑排版：避免中文表格在 400px 宽度下逐字折行 */
+  .md-compact .md-body {
+    @apply text-[12px] leading-[1.7];
+  }
+
+  .md-compact .md-body h2 {
+    @apply mt-3 text-[13px];
+  }
+
+  .md-compact .md-body h3 {
+    @apply text-[12.5px];
+  }
+
+  .md-compact .md-body table {
+    @apply text-[10.5px];
+    table-layout: auto;
+  }
+
+  .md-compact .md-body th,
+  .md-compact .md-body td {
+    @apply px-1 py-[3px];
+  }
+
+  .md-compact .md-body th:nth-child(-n + 2),
+  .md-compact .md-body td:nth-child(-n + 2) {
+    @apply whitespace-nowrap;
+  }
+
+  .row-hover {
+    @apply transition-colors duration-120 hover:bg-brand-50/60;
+  }
+
+  .scroll-area {
+    @apply overflow-y-auto overflow-x-hidden;
+  }
+}
+
+/* 拖动分隔条时禁止选中文本 */
+.resizing,
+.resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}

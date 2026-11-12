@@ -1,0 +1,1014 @@
+/** 知邮 ZhiMail —— 渲染进程全局状态与业务动作 */
+
+import { create } from 'zustand';
+import { api } from '@/lib/api';
+import { htmlToPlain } from '@/lib/markdown';
+import { dateOnly, fullTime } from '@/lib/format';
+import type {
+  Account,
+  AccountInput,
+  AnalysisStats,
+  AppInfo,
+  AppSettings,
+  Brief,
+  Folder,
+  MessageFull,
+  MessageMeta,
+  MessageQuery,
+  RangeAnalysisParams,
+  ReplySuggestion,
+  SyncProgress,
+  ThreadSummary,
+  TodoItem,
+  TodoStats,
+  TriageResult,
+} from '@/types/zhimail';
+import type { UpdateState } from '@/types/zhimail';
+
+export type MainView = 'mail' | 'briefs' | 'todos' | 'analysis';
+export type AITab = 'analysis' | 'brief' | 'assist' | 'todo';
+
+export interface Toast {
+  id: string;
+  type: 'info' | 'success' | 'error';
+  title: string;
+  message?: string;
+  action?: { label: string; run: () => void };
+}
+
+export interface ComposeState {
+  open: boolean;
+  mode: 'new' | 'reply' | 'replyAll' | 'forward';
+  accountId: string;
+  to: string;
+  cc: string;
+  bcc: string;
+  subject: string;
+  html: string;
+  inReplyTo?: string;
+  references?: string[];
+  draftId?: string;
+  quoteHtml?: string;
+  assistOpen: boolean;
+  attachments?: string[];
+}
+
+export interface AIOutputs {
+  message: { id: string; markdown: string } | null;
+  thread: { id: string; markdown: string; count: number } | null;
+  analysis: { markdown: string; stats: AnalysisStats; messageIds: string[]; batches: number } | null;
+  translate: {
+    id: string;
+    text: string;
+    subject: string;
+    engine: 'llm' | 'builtin';
+    target: '中文' | 'English';
+  } | null;
+  triage: { id: string; result: TriageResult } | null;
+  replies: { id: string; suggestions: ReplySuggestion[] } | null;
+}
+
+interface State {
+  ready: boolean;
+  info: AppInfo | null;
+  accounts: Account[];
+  folders: Folder[];
+  settings: AppSettings | null;
+  expandedAccounts: Record<string, boolean>;
+
+  view: MainView;
+  selectedFolderId: string | null;
+  selectedAccountId: string | null;
+  messages: MessageMeta[];
+  messageTotal: number;
+  selectedMessageId: string | null;
+  selectedMessage: MessageFull | null;
+  loadingMessages: boolean;
+
+  threadMode: boolean;
+  threads: ThreadSummary[];
+  expandedThreadIds: string[];
+
+  filters: {
+    unreadOnly: boolean;
+    flaggedOnly: boolean;
+    hasAttachment: boolean;
+    sortBy: 'date' | 'from' | 'subject' | 'size';
+    sortDir: 'asc' | 'desc';
+  };
+  searchKeyword: string;
+  searchActive: boolean;
+  searchExplain: string | null;
+
+  aiPanelOpen: boolean;
+  aiTab: AITab;
+  aiBusy: boolean;
+  aiProgress: string | null;
+  aiOutputs: AIOutputs;
+  translationVisible: boolean;
+  updateState: UpdateState | null;
+
+  analysisParams: RangeAnalysisParams;
+
+  briefs: Brief[];
+  briefGroup: string;
+  selectedBriefId: string | null;
+
+  todos: TodoItem[];
+  todoStats: TodoStats;
+
+  syncProgress: SyncProgress | null;
+  toasts: Toast[];
+  settingsOpen: boolean;
+  settingsTab: 'account' | 'ai' | 'brief' | 'about';
+  compose: ComposeState;
+
+  /* 动作 */
+  init: () => Promise<void>;
+  reloadFolders: () => Promise<void>;
+  reloadAccounts: () => Promise<void>;
+  reloadBriefs: () => Promise<void>;
+  reloadTodos: () => Promise<void>;
+  selectFolder: (folderId: string) => Promise<void>;
+  selectAccount: (accountId: string) => void;
+  toggleAccount: (accountId: string) => void;
+  loadMessages: () => Promise<void>;
+  selectMessage: (id: string) => Promise<void>;
+  toggleFlag: (ids: string[], flag: string, value: boolean) => Promise<void>;
+  deleteMessages: (ids: string[]) => Promise<void>;
+  moveMessages: (ids: string[], folderId: string) => Promise<void>;
+  setFilters: (patch: Partial<State['filters']>) => void;
+  setThreadMode: (value: boolean) => Promise<void>;
+  toggleThreadExpanded: (threadId: string) => void;
+  search: (keyword: string, useAI?: boolean) => Promise<void>;
+  clearSearch: () => Promise<void>;
+
+  syncNow: (accountId?: string) => Promise<void>;
+  saveAccount: (input: AccountInput) => Promise<void>;
+  removeAccount: (id: string) => Promise<void>;
+  testAccount: (input: AccountInput) => Promise<{ imap: { ok: boolean; message: string }; smtp: { ok: boolean; message: string } }>;
+  updateSettings: (patch: Record<string, unknown>) => Promise<void>;
+  resetDemo: () => Promise<void>;
+
+  setView: (view: MainView) => void;
+  setAIPanel: (open: boolean, tab?: AITab) => void;
+  setAIOutput: <K extends keyof AIOutputs>(key: K, value: AIOutputs[K]) => void;
+  setTranslationVisible: (visible: boolean) => void;
+  checkUpdate: () => Promise<void>;
+  downloadUpdate: () => Promise<void>;
+  installUpdate: () => Promise<void>;
+
+  runSummarize: (messageId?: string) => Promise<void>;
+  runThreadSummary: (threadId?: string) => Promise<void>;
+  runAnalysis: (params?: Partial<RangeAnalysisParams>) => Promise<void>;
+  generateBriefFromAnalysis: (kind: 'daily' | 'weekly' | 'monthly' | 'custom', title?: string) => Promise<void>;
+  generateBriefDirect: (params: RangeAnalysisParams, kind: 'daily' | 'weekly' | 'monthly' | 'custom', title?: string) => Promise<void>;
+  selectBrief: (id: string | null) => void;
+  setBriefGroup: (group: string) => void;
+  removeBrief: (id: string) => Promise<void>;
+  exportBrief: (id: string, format: 'md' | 'html' | 'docx') => Promise<void>;
+  runReplies: (messageId?: string) => Promise<void>;
+  runTranslate: (messageId: string, target: '中文' | 'English') => Promise<void>;
+  runTriage: (messageId: string) => Promise<void>;
+  extractTodosFromMessage: (messageId: string) => Promise<void>;
+  composeAssist: (action: string, text: string, extra?: { subject?: string; to?: string; targetLanguage?: string }) => Promise<string | null>;
+
+  toggleTodo: (id: string, done: boolean) => Promise<void>;
+  removeTodo: (id: string) => Promise<void>;
+  updateTodo: (id: string, patch: Record<string, unknown>) => Promise<void>;
+  clearCompletedTodos: () => Promise<void>;
+
+  openCompose: (options?: Partial<ComposeState>) => void;
+  closeCompose: () => void;
+  updateCompose: (patch: Partial<ComposeState>) => void;
+  sendCompose: () => Promise<void>;
+  saveComposeDraft: () => Promise<void>;
+  replyToMessage: (mode: 'reply' | 'replyAll' | 'forward') => void;
+
+  pushToast: (toast: Omit<Toast, 'id'>) => void;
+  dismissToast: (id: string) => void;
+  setSyncProgress: (progress: SyncProgress | null) => void;
+  openSettings: (tab?: State['settingsTab']) => void;
+  closeSettings: () => void;
+}
+
+const emptyCompose: ComposeState = {
+  open: false,
+  mode: 'new',
+  accountId: '',
+  to: '',
+  cc: '',
+  bcc: '',
+  subject: '',
+  html: '',
+  assistOpen: false,
+};
+
+const emptyOutputs: AIOutputs = {
+  message: null,
+  thread: null,
+  analysis: null,
+  translate: null,
+  triage: null,
+  replies: null,
+};
+
+function defaultRange(): RangeAnalysisParams {
+  const end = Date.now();
+  return {
+    rangeStart: end - 7 * 86400000,
+    rangeEnd: end,
+    scope: 'inbox',
+    briefKind: 'weekly',
+  };
+}
+
+function toastId(): string {
+  return `t-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
+}
+
+export const useAppStore = create<State>((set, get) => ({
+  ready: false,
+  info: null,
+  accounts: [],
+  folders: [],
+  settings: null,
+  expandedAccounts: {},
+
+  view: 'mail',
+  selectedFolderId: null,
+  selectedAccountId: null,
+  messages: [],
+  messageTotal: 0,
+  selectedMessageId: null,
+  selectedMessage: null,
+  loadingMessages: false,
+
+  threadMode: false,
+  threads: [],
+  expandedThreadIds: [],
+
+  filters: { unreadOnly: false, flaggedOnly: false, hasAttachment: false, sortBy: 'date', sortDir: 'desc' },
+  searchKeyword: '',
+  searchActive: false,
+  searchExplain: null,
+
+  aiPanelOpen: false,
+  aiTab: 'analysis',
+  aiBusy: false,
+  aiProgress: null,
+  aiOutputs: emptyOutputs,
+  translationVisible: false,
+  updateState: null,
+
+  analysisParams: defaultRange(),
+
+  briefs: [],
+  briefGroup: 'briefs/weekly',
+  selectedBriefId: null,
+
+  todos: [],
+  todoStats: { total: 0, pending: 0, done: 0, overdue: 0, high: 0 },
+
+  syncProgress: null,
+  toasts: [],
+  settingsOpen: false,
+  settingsTab: 'account',
+  compose: emptyCompose,
+
+  /* ------------------------------ 初始化 ------------------------------ */
+
+  init: async () => {
+    const [info, accounts, folders, settings] = await Promise.all([
+      api.app.info(),
+      api.accounts.list(),
+      api.folders.list(),
+      api.settings.get(),
+    ]);
+    const firstAccount = accounts.find((account) => !account.demo) ?? accounts[0];
+    const inbox =
+      folders.find((folder) => folder.accountId === firstAccount?.id && folder.kind === 'inbox') ??
+      folders.find((folder) => folder.kind === 'inbox');
+
+    set({
+      info,
+      accounts,
+      folders,
+      settings,
+      ready: true,
+      selectedAccountId: firstAccount?.id ?? null,
+      selectedFolderId: inbox?.id ?? null,
+      expandedAccounts: accounts.reduce<Record<string, boolean>>((acc, account) => {
+        acc[account.id] = true;
+        return acc;
+      }, {}),
+    });
+
+    await Promise.all([get().reloadBriefs(), get().reloadTodos()]);
+    if (inbox) await get().loadMessages();
+
+    // 事件订阅
+    api.on('sync:progress', (payload) => set({ syncProgress: payload as SyncProgress }));
+    api.on('ai:progress', (payload) => set({ aiProgress: (payload as { message: string }).message }));
+    api.on('brief:generated', (payload) => {
+      const brief = payload as Brief;
+      void get().reloadBriefs();
+      get().pushToast({
+        type: 'success',
+        title: '简报已生成',
+        message: `${brief.title}（${brief.messageCount} 封邮件 / ${brief.todoCount} 条待办）`,
+        action: {
+          label: '查看',
+          run: () => {
+            set({ view: 'briefs', selectedBriefId: brief.id, briefGroup: brief.group });
+          },
+        },
+      });
+    });
+    api.on('brief:error', (payload) => {
+      get().pushToast({ type: 'error', title: '自动简报失败', message: (payload as { message: string }).message });
+    });
+    api.on('mail:new', (payload) => {
+      const { accountId } = payload as { accountId: string };
+      get().pushToast({ type: 'info', title: '收到新邮件', message: '正在同步最新邮件…' });
+      void get().syncNow(accountId);
+    });
+    api.on('mail:changed', () => {
+      void get().reloadFolders();
+      void get().loadMessages();
+    });
+    api.on('update:status', (payload) => set({ updateState: payload as UpdateState }));
+    void api.update.state().then((state) => set({ updateState: state }));
+
+    // 截图与调试钩子
+    window.__zhimailDev = {
+      showMail: () => set({ view: 'mail', aiPanelOpen: false }),
+      showAI: () => {
+        set({ view: 'mail', aiPanelOpen: true, aiTab: 'analysis' });
+        void (async () => {
+          if (!get().messages.length) await get().loadMessages();
+          const target = get().selectedMessageId ?? get().messages[0]?.id;
+          if (!target) return;
+          await get().selectMessage(target);
+          if (!get().aiOutputs.message) await get().runSummarize(target);
+        })();
+      },
+      showBriefs: () => {
+        set({ view: 'briefs', briefGroup: 'briefs/weekly', aiPanelOpen: false });
+        const first = get().briefs[0];
+        if (first) set({ selectedBriefId: first.id });
+      },
+      showTodos: () => set({ view: 'todos', aiPanelOpen: false }),
+      showSettings: () => set({ settingsOpen: true, settingsTab: 'ai' }),
+    };
+  },
+
+  reloadFolders: async () => set({ folders: await api.folders.list() }),
+  reloadAccounts: async () => set({ accounts: await api.accounts.list() }),
+  reloadBriefs: async () => set({ briefs: await api.brief.list() }),
+  reloadTodos: async () => {
+    const result = await api.todos.list();
+    set({ todos: result.items, todoStats: result.stats });
+  },
+
+  /* ------------------------------ 文件夹与邮件 ------------------------------ */
+
+  selectFolder: async (folderId: string) => {
+    if (folderId.startsWith('briefs')) {
+      set({ selectedFolderId: folderId, view: 'briefs', briefGroup: folderId === 'briefs' ? '' : folderId, selectedBriefId: null });
+      await get().reloadBriefs();
+      return;
+    }
+    const folder = get().folders.find((item) => item.id === folderId);
+    set({
+      selectedFolderId: folderId,
+      selectedAccountId: folder?.accountId ?? get().selectedAccountId,
+      view: 'mail',
+      searchActive: false,
+      searchKeyword: '',
+      searchExplain: null,
+      selectedMessageId: null,
+      selectedMessage: null,
+    });
+    await get().loadMessages();
+  },
+
+  selectAccount: (accountId: string) => set({ selectedAccountId: accountId }),
+
+  toggleAccount: (accountId: string) =>
+    set((state) => ({
+      expandedAccounts: { ...state.expandedAccounts, [accountId]: !state.expandedAccounts[accountId] },
+    })),
+
+  loadMessages: async () => {
+    const { selectedFolderId, filters, searchKeyword, searchActive, threadMode } = get();
+    if (!selectedFolderId || selectedFolderId.startsWith('briefs')) return;
+    set({ loadingMessages: true });
+    try {
+      const query: MessageQuery = {
+        folderId: selectedFolderId,
+        keyword: searchActive ? searchKeyword : undefined,
+        unreadOnly: filters.unreadOnly,
+        flaggedOnly: filters.flaggedOnly,
+        hasAttachment: filters.hasAttachment,
+        sortBy: filters.sortBy,
+        sortDir: filters.sortDir,
+        limit: 400,
+      };
+      if (threadMode) {
+        const result = await api.messages.threads(query);
+        set({ threads: result.items, messageTotal: result.total, messages: result.items.flatMap((t) => t.messages) });
+      } else {
+        const result = await api.messages.list(query);
+        set({ messages: result.items, messageTotal: result.total, threads: [] });
+      }
+    } finally {
+      set({ loadingMessages: false });
+    }
+  },
+
+  selectMessage: async (id: string) => {
+    const cachedTranslation = get().aiOutputs.translate;
+    set({
+      selectedMessageId: id,
+      selectedMessage: null,
+      translationVisible: Boolean(cachedTranslation && cachedTranslation.id === id),
+    });
+    const message = await api.messages.get(id);
+    set({ selectedMessage: message ?? null });
+    if (message && !message.flags.includes('\\Seen')) {
+      const folders = await api.messages.setFlags({ ids: [id], flag: '\\Seen', value: true });
+      set((state) => ({
+        folders,
+        messages: state.messages.map((item) =>
+          item.id === id ? { ...item, flags: [...new Set([...item.flags, '\\Seen'])] } : item,
+        ),
+        threads: state.threads.map((thread) => ({
+          ...thread,
+          messages: thread.messages.map((item) =>
+            item.id === id ? { ...item, flags: [...new Set([...item.flags, '\\Seen'])] } : item,
+          ),
+        })),
+      }));
+    }
+  },
+
+  toggleFlag: async (ids, flag, value) => {
+    const folders = await api.messages.setFlags({ ids, flag, value });
+    set((state) => ({
+      folders,
+      messages: state.messages.map((item) =>
+        ids.includes(item.id)
+          ? { ...item, flags: value ? [...new Set([...item.flags, flag])] : item.flags.filter((f) => f !== flag) }
+          : item,
+      ),
+      selectedMessage:
+        state.selectedMessage && ids.includes(state.selectedMessage.id)
+          ? {
+              ...state.selectedMessage,
+              flags: value
+                ? [...new Set([...state.selectedMessage.flags, flag])]
+                : state.selectedMessage.flags.filter((f) => f !== flag),
+            }
+          : state.selectedMessage,
+    }));
+  },
+
+  deleteMessages: async (ids) => {
+    const folders = await api.messages.remove(ids);
+    set((state) => ({
+      folders,
+      messages: state.messages.filter((item) => !ids.includes(item.id)),
+      selectedMessageId: ids.includes(state.selectedMessageId ?? '') ? null : state.selectedMessageId,
+      selectedMessage: ids.includes(state.selectedMessageId ?? '') ? null : state.selectedMessage,
+    }));
+    get().pushToast({ type: 'info', title: `已删除 ${ids.length} 封邮件` });
+  },
+
+  moveMessages: async (ids, folderId) => {
+    const folders = await api.messages.move({ ids, folderId });
+    const target = folders.find((folder) => folder.id === folderId);
+    set((state) => ({
+      folders,
+      messages: state.messages.filter((item) => !ids.includes(item.id)),
+      selectedMessageId: ids.includes(state.selectedMessageId ?? '') ? null : state.selectedMessageId,
+      selectedMessage: ids.includes(state.selectedMessageId ?? '') ? null : state.selectedMessage,
+    }));
+    get().pushToast({ type: 'info', title: `已移动 ${ids.length} 封邮件到「${target?.name ?? '目标文件夹'}」` });
+  },
+
+  setFilters: (patch) => {
+    set((state) => ({ filters: { ...state.filters, ...patch } }));
+    void get().loadMessages();
+  },
+
+  setThreadMode: async (value) => {
+    set({ threadMode: value });
+    await get().loadMessages();
+  },
+
+  toggleThreadExpanded: (threadId) =>
+    set((state) => ({
+      expandedThreadIds: state.expandedThreadIds.includes(threadId)
+        ? state.expandedThreadIds.filter((id) => id !== threadId)
+        : [...state.expandedThreadIds, threadId],
+    })),
+
+  search: async (keyword, useAI = false) => {
+    const trimmed = keyword.trim();
+    if (!trimmed) {
+      await get().clearSearch();
+      return;
+    }
+    set({ searchKeyword: trimmed, searchActive: true, loadingMessages: true });
+    try {
+      if (useAI) {
+        const result = await api.search.ai(trimmed);
+        set({
+          messages: result.items,
+          messageTotal: result.items.length,
+          searchExplain: `${result.usedAI ? 'AI 解析' : '本地解析'}：${result.explanation}${
+            result.fallbackReason ? `（AI 不可用：${result.fallbackReason}）` : ''
+          }`,
+          threadMode: false,
+        });
+      } else {
+        const items = await api.search.run({ text: trimmed } as MessageQuery & { text: string });
+        set({ messages: items, messageTotal: items.length, searchExplain: `关键词检索：${trimmed}`, threadMode: false });
+      }
+    } finally {
+      set({ loadingMessages: false });
+    }
+  },
+
+  clearSearch: async () => {
+    set({ searchActive: false, searchKeyword: '', searchExplain: null });
+    await get().loadMessages();
+  },
+
+  /* ------------------------------ 同步与账户 ------------------------------ */
+
+  syncNow: async (accountId) => {
+    const target = accountId ?? get().selectedAccountId ?? get().accounts.find((a) => !a.demo)?.id;
+    if (!target) {
+      get().pushToast({ type: 'error', title: '没有可同步的账户', message: '请先在设置中添加邮箱账户' });
+      return;
+    }
+    const account = get().accounts.find((item) => item.id === target);
+    const result = await api.sync.start(target);
+    if (!result.ok) {
+      get().pushToast({ type: 'error', title: '同步失败', message: result.error ?? '未知错误' });
+      return;
+    }
+    if (result.errors?.length) {
+      get().pushToast({
+        type: 'error',
+        title: '部分文件夹同步失败',
+        message: result.errors.slice(0, 2).join('；'),
+      });
+    }
+    await Promise.all([get().reloadFolders(), get().loadMessages()]);
+    get().pushToast({
+      type: 'success',
+      title: `${account?.name ?? '邮箱'}同步完成`,
+      message: `更新 ${result.fetched ?? 0} 封邮件`,
+    });
+  },
+
+  saveAccount: async (input) => {
+    const accounts = await api.accounts.save(input);
+    set({ accounts });
+    await get().reloadFolders();
+    get().pushToast({ type: 'success', title: '账户已保存', message: input.email });
+  },
+
+  removeAccount: async (id) => {
+    const accounts = await api.accounts.remove(id);
+    set({ accounts });
+    await get().reloadFolders();
+    get().pushToast({ type: 'info', title: '账户已移除' });
+  },
+
+  testAccount: async (input) => api.accounts.test(input),
+
+  updateSettings: async (patch) => {
+    const settings = await api.settings.update(patch);
+    set({ settings });
+  },
+
+  resetDemo: async () => {
+    await api.demo.reset();
+    await Promise.all([get().reloadFolders(), get().reloadBriefs(), get().reloadTodos()]);
+    await get().loadMessages();
+    get().pushToast({ type: 'success', title: '演示数据已重置' });
+  },
+
+  /* ------------------------------ 界面状态 ------------------------------ */
+
+  setView: (view) => set({ view }),
+  setAIPanel: (open, tab) => set({ aiPanelOpen: open, aiTab: tab ?? get().aiTab }),
+  setAIOutput: (key, value) => set((state) => ({ aiOutputs: { ...state.aiOutputs, [key]: value } })),
+
+  /* ------------------------------ AI 动作 ------------------------------ */
+
+  runSummarize: async (messageId) => {
+    const id = messageId ?? get().selectedMessageId;
+    if (!id) return;
+    set({ aiBusy: true, aiProgress: '正在读取邮件并生成摘要…', aiPanelOpen: true, aiTab: 'analysis' });
+    try {
+      const result = await api.ai.summarize(id);
+      if (result.ok && result.markdown) {
+        get().setAIOutput('message', { id, markdown: result.markdown });
+      } else {
+        get().pushToast({ type: 'error', title: '摘要失败', message: result.error ?? '未知错误' });
+      }
+    } finally {
+      set({ aiBusy: false, aiProgress: null });
+    }
+  },
+
+  runThreadSummary: async (threadId) => {
+    const meta = get().messages.find((item) => item.id === get().selectedMessageId);
+    const id = threadId ?? meta?.threadId;
+    if (!id) {
+      get().pushToast({ type: 'info', title: '这封邮件暂无会话串', message: '会话串依据 References 与主题归并' });
+      return;
+    }
+    set({ aiBusy: true, aiProgress: '正在整理会话串…', aiPanelOpen: true, aiTab: 'analysis' });
+    try {
+      const result = await api.ai.summarizeThread(id);
+      if (result.ok && result.markdown) {
+        get().setAIOutput('thread', { id, markdown: result.markdown, count: result.count ?? 0 });
+      } else {
+        get().pushToast({ type: 'error', title: '会话摘要失败', message: result.error ?? '未知错误' });
+      }
+    } finally {
+      set({ aiBusy: false, aiProgress: null });
+    }
+  },
+
+  runAnalysis: async (params) => {
+    const merged: RangeAnalysisParams = { ...get().analysisParams, ...(params ?? {}) };
+    set({ analysisParams: merged, aiBusy: true, aiProgress: '正在收集邮件…', aiPanelOpen: true, aiTab: 'analysis' });
+    try {
+      const result = await api.ai.analyze(merged);
+      if (result.ok && result.result) {
+        get().setAIOutput('analysis', {
+          markdown: result.result.markdown,
+          stats: result.result.stats,
+          messageIds: result.result.messageIds,
+          batches: result.result.batches,
+        });
+        if (result.result.todos.length) await get().reloadTodos();
+      } else {
+        get().pushToast({ type: 'error', title: '汇总分析失败', message: result.error ?? '未知错误' });
+      }
+    } finally {
+      set({ aiBusy: false, aiProgress: null });
+    }
+  },
+
+  generateBriefFromAnalysis: async (kind, title) => {
+    const params = get().analysisParams;
+    await get().generateBriefDirect(params, kind, title);
+  },
+
+  generateBriefDirect: async (params, kind, title) => {
+    set({ aiBusy: true, aiProgress: '正在生成简报…' });
+    try {
+      const result = await api.brief.generate({ ...params, briefKind: kind, title });
+      if (result.ok && result.brief) {
+        await get().reloadBriefs();
+        await get().reloadTodos();
+        set({ view: 'briefs', selectedBriefId: result.brief.id, briefGroup: result.brief.group });
+        get().pushToast({
+          type: 'success',
+          title: '简报已生成并存入「邮件简报」文件夹',
+          message: result.brief.title,
+        });
+      } else {
+        get().pushToast({ type: 'error', title: '简报生成失败', message: result.error ?? '未知错误' });
+      }
+    } finally {
+      set({ aiBusy: false, aiProgress: null });
+    }
+  },
+
+  selectBrief: (id) => set({ selectedBriefId: id }),
+  setBriefGroup: (group) => set({ briefGroup: group, selectedBriefId: null }),
+
+  removeBrief: async (id) => {
+    const briefs = await api.brief.remove(id);
+    set((state) => ({
+      briefs,
+      selectedBriefId: state.selectedBriefId === id ? null : state.selectedBriefId,
+    }));
+    await get().reloadFolders();
+  },
+
+  exportBrief: async (id, format) => {
+    const result = await api.brief.export({ id, format });
+    if (result.ok && result.path) {
+      get().pushToast({
+        type: 'success',
+        title: `已导出 ${format.toUpperCase()} 文件`,
+        message: result.path,
+        action: { label: '打开所在文件夹', run: () => void api.system.revealFile(result.path as string) },
+      });
+    } else {
+      get().pushToast({ type: 'error', title: '导出失败', message: result.error ?? '未知错误' });
+    }
+  },
+
+  runReplies: async (messageId) => {
+    const id = messageId ?? get().selectedMessageId;
+    if (!id) return;
+    set({ aiBusy: true, aiProgress: '正在生成回复建议…', aiPanelOpen: true, aiTab: 'assist' });
+    try {
+      const result = await api.ai.replies(id);
+      if (result.ok && result.suggestions) {
+        get().setAIOutput('replies', { id, suggestions: result.suggestions });
+      } else {
+        get().pushToast({ type: 'error', title: '回复建议失败', message: result.error ?? '未知错误' });
+      }
+    } finally {
+      set({ aiBusy: false, aiProgress: null });
+    }
+  },
+
+  runTranslate: async (messageId, target) => {
+    const cached = get().aiOutputs.translate;
+    if (cached && cached.id === messageId && cached.target === target) {
+      set({ translationVisible: true });
+      return;
+    }
+    set({ aiBusy: true, aiProgress: `正在翻译为${target}…`, aiTab: 'assist' });
+    try {
+      const result = await api.ai.translate({ messageId, target });
+      if (result.ok && result.text) {
+        get().setAIOutput('translate', {
+          id: messageId,
+          text: result.text,
+          subject: result.subject ?? '',
+          engine: result.engine ?? 'llm',
+          target,
+        });
+        set({ translationVisible: true });
+        get().pushToast({
+          type: 'success',
+          title: `已翻译为${target}`,
+          message: result.engine === 'builtin' ? '使用内置免费翻译引擎' : '使用大模型翻译',
+        });
+      } else {
+        get().pushToast({ type: 'error', title: '翻译失败', message: result.error ?? '未知错误' });
+      }
+    } finally {
+      set({ aiBusy: false, aiProgress: null });
+    }
+  },
+
+  setTranslationVisible: (visible) => set({ translationVisible: visible }),
+
+  checkUpdate: async () => {
+    const state = await api.update.check();
+    set({ updateState: state });
+    if (state.phase === 'not-available') {
+      get().pushToast({ type: 'success', title: '已是最新版本', message: `当前版本 v${state.currentVersion}` });
+    } else if (state.phase === 'available') {
+      get().pushToast({
+        type: 'info',
+        title: `发现新版本 v${state.version}`,
+        message: '可在「设置 → 在线更新」中下载安装',
+      });
+    } else if (state.phase === 'error') {
+      get().pushToast({ type: 'error', title: '检查更新失败', message: state.error });
+    } else if (state.phase === 'unsupported') {
+      get().pushToast({ type: 'info', title: '当前为开发模式', message: state.error });
+    }
+  },
+
+  downloadUpdate: async () => {
+    const state = await api.update.download();
+    set({ updateState: state });
+  },
+
+  installUpdate: async () => {
+    await api.update.install();
+  },
+
+  runTriage: async (messageId) => {
+    set({ aiBusy: true, aiProgress: '正在判断重要度…', aiPanelOpen: true, aiTab: 'assist' });
+    try {
+      const result = await api.ai.triage(messageId);
+      if (result.ok && result.result) {
+        get().setAIOutput('triage', { id: messageId, result: result.result });
+      } else {
+        get().pushToast({ type: 'error', title: '重要度判断失败', message: result.error ?? '未知错误' });
+      }
+    } finally {
+      set({ aiBusy: false, aiProgress: null });
+    }
+  },
+
+  extractTodosFromMessage: async (messageId) => {
+    set({ aiBusy: true, aiProgress: '正在提取待办事项…' });
+    try {
+      const result = await api.ai.todos(messageId);
+      if (result.ok) {
+        await get().reloadTodos();
+        get().pushToast({
+          type: 'success',
+          title: `已提取 ${result.items?.length ?? 0} 条待办`,
+          message: '可在「待办事项」中查看',
+        });
+      } else {
+        get().pushToast({ type: 'error', title: '待办提取失败', message: result.error ?? '未知错误' });
+      }
+    } finally {
+      set({ aiBusy: false, aiProgress: null });
+    }
+  },
+
+  composeAssist: async (action, text, extra) => {
+    set({ aiBusy: true, aiProgress: '正在生成…' });
+    try {
+      const result = await api.ai.compose({
+        action: action as never,
+        text,
+        subject: extra?.subject,
+        to: extra?.to,
+        targetLanguage: extra?.targetLanguage,
+      });
+      if (result.ok && result.text) return result.text;
+      get().pushToast({ type: 'error', title: '写作辅助失败', message: result.error ?? '未知错误' });
+      return null;
+    } finally {
+      set({ aiBusy: false, aiProgress: null });
+    }
+  },
+
+  /* ------------------------------ 待办 ------------------------------ */
+
+  toggleTodo: async (id, done) => {
+    const result = await api.todos.toggle({ id, done });
+    set({ todos: result.items, todoStats: result.stats });
+  },
+
+  removeTodo: async (id) => {
+    const result = await api.todos.remove(id);
+    set({ todos: result.items, todoStats: result.stats });
+  },
+
+  updateTodo: async (id, patch) => {
+    const result = await api.todos.update({ id, patch });
+    set({ todos: result.items, todoStats: result.stats });
+  },
+
+  clearCompletedTodos: async () => {
+    const result = await api.todos.clearCompleted();
+    set({ todos: result.items, todoStats: result.stats });
+  },
+
+  /* ------------------------------ 写信 ------------------------------ */
+
+  openCompose: (options) => {
+    const accountId = options?.accountId ?? get().selectedAccountId ?? get().accounts[0]?.id ?? '';
+    set({ compose: { ...emptyCompose, open: true, accountId, ...options } });
+  },
+
+  closeCompose: () => set((state) => ({ compose: { ...state.compose, open: false } })),
+
+  updateCompose: (patch) => set((state) => ({ compose: { ...state.compose, ...patch } })),
+
+  sendCompose: async () => {
+    const compose = get().compose;
+    if (!compose.to.trim()) {
+      get().pushToast({ type: 'error', title: '请填写收件人' });
+      return;
+    }
+    const result = await api.messages.send({
+      accountId: compose.accountId,
+      to: compose.to,
+      cc: compose.cc,
+      bcc: compose.bcc,
+      subject: compose.subject,
+      html: compose.html,
+      text: htmlToPlain(compose.html),
+      inReplyTo: compose.inReplyTo,
+      references: compose.references,
+      attachments: compose.attachments ?? [],
+    });
+    if (result.ok) {
+      set((state) => ({ compose: { ...state.compose, open: false } }));
+      await get().reloadFolders();
+      get().pushToast({ type: 'success', title: '邮件已发送', message: compose.subject || '(无主题)' });
+    } else {
+      get().pushToast({ type: 'error', title: '发送失败', message: result.error ?? '未知错误' });
+    }
+  },
+
+  saveComposeDraft: async () => {
+    const compose = get().compose;
+    if (!compose.accountId) return;
+    const result = await api.messages.saveDraft({
+      accountId: compose.accountId,
+      to: compose.to,
+      cc: compose.cc,
+      subject: compose.subject,
+      html: compose.html,
+      text: htmlToPlain(compose.html),
+      draftId: compose.draftId,
+    });
+    if (result.ok && result.id) {
+      set((state) => ({ compose: { ...state.compose, draftId: result.id } }));
+      await get().reloadFolders();
+    }
+  },
+
+  replyToMessage: (mode) => {
+    const message = get().selectedMessage;
+    if (!message) return;
+    const accountId = message.accountId;
+    const account = get().accounts.find((item) => item.id === accountId);
+    const sender = message.from[0];
+    const quote = `<br /><br /><blockquote style="border-left:2px solid #d9dde2;padding-left:10px;color:#5f6772;font-size:13px;">
+      <div>----- 原始邮件 -----</div>
+      <div>发件人：${sender?.name ?? ''} &lt;${sender?.address ?? ''}&gt;</div>
+      <div>时间：${fullTime(message.date)}</div>
+      <div>主题：${message.subject}</div>
+      <br />${message.body.html ?? (message.body.text ?? '').replace(/\n/g, '<br />')}
+    </blockquote>`;
+
+    const replySubject = /^(re|回复|答复)\s*[:：]/i.test(message.subject)
+      ? message.subject
+      : `Re: ${message.subject}`;
+    const forwardSubject = /^(fw|fwd|转发)\s*[:：]/i.test(message.subject)
+      ? message.subject
+      : `Fwd: ${message.subject}`;
+
+    if (mode === 'forward') {
+      get().openCompose({
+        mode,
+        accountId,
+        subject: forwardSubject,
+        html: `<br /><br />${quote}`,
+        quoteHtml: quote,
+      });
+      return;
+    }
+
+    const to =
+      mode === 'replyAll'
+        ? [sender?.address, ...message.to.map((item) => item.address)]
+            .filter((address): address is string => Boolean(address))
+            .filter((address) => address !== account?.email)
+            .filter((address, index, list) => list.indexOf(address) === index)
+            .join(', ')
+        : (sender?.address ?? '');
+
+    const cc =
+      mode === 'replyAll'
+        ? message.cc
+            .map((item) => item.address)
+            .filter((address) => address !== account?.email)
+            .join(', ')
+        : '';
+
+    get().openCompose({
+      mode,
+      accountId,
+      to,
+      cc,
+      subject: replySubject,
+      html: `<p></p><p></p>${quote}`,
+      quoteHtml: quote,
+      inReplyTo: message.messageId,
+      references: [...(message.references ?? []), message.messageId].filter(Boolean) as string[],
+    });
+  },
+
+  /* ------------------------------ 提示与面板 ------------------------------ */
+
+  pushToast: (toast) => {
+    const id = toastId();
+    set((state) => ({ toasts: [...state.toasts, { ...toast, id }] }));
+    setTimeout(() => get().dismissToast(id), toast.type === 'error' ? 9000 : 5200);
+  },
+
+  dismissToast: (id) => set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
+
+  setSyncProgress: (progress) => set({ syncProgress: progress }),
+
+  openSettings: (tab) => set({ settingsOpen: true, settingsTab: tab ?? 'account' }),
+  closeSettings: () => set({ settingsOpen: false }),
+}));
+
+/** 便于其他模块复用：判断是否为「邮件简报」虚拟文件夹 */
+export function isBriefFolder(folderId: string | null | undefined): boolean {
+  return Boolean(folderId && folderId.startsWith('briefs'));
+}
+
+/** 生成分析区间的人类可读标签 */
+export function rangeLabel(start: number, end: number): string {
+  return `${dateOnly(start)} 至 ${dateOnly(end)}`;
+}

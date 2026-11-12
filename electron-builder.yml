@@ -1,0 +1,55 @@
+appId: com.zhimail.desktop
+productName: ZhiMail
+copyright: Copyright © 2026 ZhiMail
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist-electron/**/*
+  - dist-renderer/**/*
+  - package.json
+  - '!**/*.map'
+  - '!**/{.eslintrc,.editorconfig,.prettierrc}'
+
+asar: true
+asarUnpack:
+  - '**/*.node'
+
+# 在线更新：发布到 GitHub Releases，客户端通过 latest.yml 检查新版本
+publish:
+  provider: github
+  owner: f891127
+  repo: zhimail
+  releaseType: release
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  artifactName: ZhiMail-Setup-${version}-x64.${ext}
+  executableName: ZhiMail
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: ZhiMail
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  language: '2052'
+  installerLanguages:
+    - zh_CN
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+  differentialPackage: true
+
+portable:
+  artifactName: ZhiMail-Portable-${version}-x64.${ext}

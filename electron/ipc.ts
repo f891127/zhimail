@@ -1,0 +1,599 @@
+/** IPC 接口层：渲染进程通过 preload 暴露的 API 调用这些处理函数 */
+
+import { BrowserWindow, dialog, ipcMain, shell, app } from 'electron';
+import fs from 'node:fs';
+import path from 'node:path';
+import { store } from './services/store';
+import {
+  listAccounts,
+  removeAccount,
+  saveAccount,
+  testAccount,
+  ensureDefaultFolders,
+} from './services/accounts';
+import { imapService } from './services/imap';
+import { smtpService } from './services/smtp';
+import { groupThreads } from './services/thread';
+import { runSearch } from './services/search';
+import { generateBrief, exportBrief, listBriefs, getBrief, removeBrief, BRIEF_GROUPS, BRIEF_ROOT_ID } from './services/brief';
+import { createTodoItems, listTodos, removeTodo, toggleTodo, updateTodo, clearCompleted, todoStats } from './services/todo';
+import { seedDemoData, DEMO_ACCOUNT_ID } from './services/demo';
+import { briefScheduler } from './services/scheduler';
+import {
+  analyzeRange,
+  composeAssist,
+  extractTodosFromMessage,
+  interpretSearch,
+  suggestReplies,
+  summarizeMessage,
+  summarizeThread,
+  testAIConnection,
+  translateMessage,
+  triageMessage,
+} from './services/ai/tasks';
+import { AI_PROVIDERS } from './services/ai/presets';
+import { MAIL_PRESETS } from './services/presets';
+import { isStrongEncryptionAvailable } from './services/crypto';
+import type {
+  AccountInput,
+  AISettings,
+  AppSettings,
+  BriefGenerateParams,
+  ComposeAssistParams,
+  DraftInput,
+  FolderView,
+  MessageFull,
+  MessageMeta,
+  MessageQuery,
+  RangeAnalysisParams,
+  SyncProgress,
+} from './services/types';
+
+let mainWindow: BrowserWindow | null = null;
+
+export function setMainWindow(window: BrowserWindow): void {
+  mainWindow = window;
+}
+
+function emit(channel: string, payload: unknown): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, payload);
+  }
+}
+
+function briefFolders(): FolderView[] {
+  const briefs = store.listBriefs();
+  const root: FolderView = {
+    id: BRIEF_ROOT_ID,
+    accountId: 'local',
+    name: '邮件简报',
+    kind: 'brief',
+    deletable: false,
+    order: 900,
+    local: true,
+    unread: 0,
+    total: briefs.length,
+  };
+  const groups: FolderView[] = BRIEF_GROUPS.map((group, index) => ({
+    id: group.id,
+    accountId: 'local',
+    name: group.name,
+    kind: 'brief' as const,
+    parentId: BRIEF_ROOT_ID,
+    deletable: false,
+    order: 901 + index,
+    local: true,
+    unread: 0,
+    total: briefs.filter((brief) => brief.group === group.id).length,
+  }));
+  return [root, ...groups];
+}
+
+function folderViews(): FolderView[] {
+  const folders = store.listFolders().map((folder) => ({
+    ...folder,
+    unread: store.countUnread(folder.id),
+    total: store.countFolder(folder.id),
+  }));
+  return [...folders, ...briefFolders()];
+}
+
+function folderOf(id: string) {
+  return store.getFolder(id);
+}
+
+/** 读取邮件正文；真实账户缺少正文时按需从服务器下载 */
+async function loadMessage(id: string): Promise<MessageFull | undefined> {
+  const meta = store.getMessageMeta(id);
+  if (!meta) return undefined;
+  let body = store.getMessageBody(meta.accountId, meta.folderId, meta.uid);
+  const account = store.getAccount(meta.accountId);
+  const folder = folderOf(meta.folderId);
+  if ((!body || (!body.text && !body.html)) && account && folder && !account.demo && folder.remotePath) {
+    try {
+      const fetched = await imapService.fetchMessageBody(account, folder, meta.uid);
+      if (fetched) body = fetched;
+    } catch (error) {
+      console.warn('[ipc] 按需下载正文失败', (error as Error).message);
+    }
+  }
+  return { ...meta, body: body ?? { attachments: [] } };
+}
+
+export function registerIpcHandlers(): void {
+  /* ------------------------------ 应用信息 ------------------------------ */
+
+  ipcMain.handle('app/info', () => ({
+    version: app.getVersion(),
+    platform: process.platform,
+    dataDir: store.root,
+    strongEncryption: isStrongEncryptionAvailable(),
+    mailPresets: MAIL_PRESETS,
+    aiProviders: AI_PROVIDERS,
+  }));
+
+  /* ------------------------------ 账户 ------------------------------ */
+
+  ipcMain.handle('accounts/list', () => listAccounts());
+
+  ipcMain.handle('accounts/save', (_event, input: AccountInput) => {
+    const account = saveAccount(input);
+    ensureDefaultFolders(account.id);
+    return listAccounts();
+  });
+
+  ipcMain.handle('accounts/remove', async (_event, id: string) => {
+    if (id === DEMO_ACCOUNT_ID) {
+      await imapService.stopIdle(id);
+      store.removeAccount(id);
+      return listAccounts();
+    }
+    return removeAccount(id);
+  });
+
+  ipcMain.handle('accounts/test', async (_event, input: AccountInput) => testAccount(input));
+
+  /* ------------------------------ 文件夹 ------------------------------ */
+
+  ipcMain.handle('folders/list', () => folderViews());
+
+  ipcMain.handle('folders/create', (_event, payload: { accountId: string; name: string }) => {
+    const id = `${payload.accountId}:custom-${Date.now()}`;
+    store.upsertFolder({
+      id,
+      accountId: payload.accountId,
+      name: payload.name,
+      kind: 'custom',
+      deletable: true,
+      order: 20,
+      local: true,
+    });
+    return folderViews();
+  });
+
+  ipcMain.handle('folders/remove', (_event, id: string) => {
+    const folder = folderOf(id);
+    if (folder && folder.deletable) store.removeFolder(id);
+    return folderViews();
+  });
+
+  /* ------------------------------ 邮件 ------------------------------ */
+
+  ipcMain.handle('messages/list', (_event, query: MessageQuery) => {
+    if (query.folderId && query.folderId.startsWith('briefs')) {
+      return { total: 0, items: [] as MessageMeta[] };
+    }
+    return store.queryMessages(query);
+  });
+
+  ipcMain.handle('messages/get', async (_event, id: string) => loadMessage(id));
+
+  ipcMain.handle('messages/thread', (_event, threadId: string) => {
+    const result = store.queryMessages({ threadId, limit: 200, sortDir: 'asc' });
+    return result.items;
+  });
+
+  ipcMain.handle('messages/threads', (_event, query: MessageQuery) => {
+    const result = store.queryMessages({ ...query, limit: 2000 });
+    const threads = groupThreads(result.items).slice(query.offset ?? 0, (query.offset ?? 0) + (query.limit ?? 200));
+    return { total: groupThreads(result.items).length, items: threads };
+  });
+
+  ipcMain.handle('messages/flags', async (_event, payload: { ids: string[]; flag: string; value: boolean }) => {
+    const touched: { accountId: string; folderId: string; uid: number; add: boolean }[] = [];
+    for (const id of payload.ids) {
+      const meta = store.getMessageMeta(id);
+      if (!meta) continue;
+      const flags = new Set(meta.flags);
+      if (payload.value) flags.add(payload.flag);
+      else flags.delete(payload.flag);
+      store.patchMessage(id, { flags: [...flags] });
+      touched.push({ accountId: meta.accountId, folderId: meta.folderId, uid: meta.uid, add: payload.value });
+    }
+    // 后台同步到服务器，失败不影响本地状态
+    for (const item of touched) {
+      const account = store.getAccount(item.accountId);
+      const folder = folderOf(item.folderId);
+      if (!account || !folder || account.demo || !folder.remotePath) continue;
+      try {
+        await imapService.setFlags(account, folder, [item.uid], payload.flag, item.add);
+      } catch (error) {
+        console.warn('[ipc] 标记同步失败', (error as Error).message);
+      }
+    }
+    return folderViews();
+  });
+
+  ipcMain.handle('messages/move', async (_event, payload: { ids: string[]; folderId: string }) => {
+    store.moveMessages(payload.ids, payload.folderId);
+    const target = folderOf(payload.folderId);
+    if (target?.remotePath) {
+      for (const id of payload.ids) {
+        const meta = store.getMessageMeta(id);
+        if (!meta) continue;
+        const account = store.getAccount(meta.accountId);
+        const source = folderOf(meta.folderId);
+        if (!account || account.demo || !source?.remotePath) continue;
+        try {
+          await imapService.moveMessages(account, source, [meta.uid], target.remotePath);
+        } catch (error) {
+          console.warn('[ipc] 移动同步失败', (error as Error).message);
+        }
+      }
+    }
+    return folderViews();
+  });
+
+  ipcMain.handle('messages/delete', async (_event, ids: string[]) => {
+    const metas = ids.map((id) => store.getMessageMeta(id)).filter(Boolean) as MessageMeta[];
+    store.deleteMessages(ids);
+    for (const meta of metas) {
+      const account = store.getAccount(meta.accountId);
+      const folder = folderOf(meta.folderId);
+      if (!account || account.demo || !folder?.remotePath) continue;
+      try {
+        await imapService.deleteMessages(account, folder, [meta.uid]);
+      } catch (error) {
+        console.warn('[ipc] 删除同步失败', (error as Error).message);
+      }
+    }
+    return folderViews();
+  });
+
+  ipcMain.handle('messages/send', async (_event, draft: DraftInput) => {
+    const account = store.getAccount(draft.accountId);
+    if (!account) return { ok: false, error: '账户不存在' };
+    const result = await smtpService.send(account, draft);
+    if (result.ok) {
+      // 写入已发送文件夹（本地副本）
+      const sentFolder = store
+        .listFolders(account.id)
+        .find((folder) => folder.kind === 'sent');
+      if (sentFolder) {
+        const uid = Date.now();
+        const meta: MessageMeta = {
+          id: `${account.id}/${sentFolder.id}/${uid}`,
+          accountId: account.id,
+          folderId: sentFolder.id,
+          uid,
+          messageId: result.messageId,
+          subject: draft.subject || '(无主题)',
+          from: [{ name: account.displayName, address: account.email }],
+          to: draft.to.split(/[,;]/).filter(Boolean).map((address) => ({ address: address.trim() })),
+          cc: (draft.cc ?? '')
+            .split(/[,;]/)
+            .filter(Boolean)
+            .map((address) => ({ address: address.trim() })),
+          date: Date.now(),
+          size: draft.html.length,
+          flags: ['\\Seen'],
+          hasAttachments: Boolean(draft.attachments?.length),
+          snippet: draft.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 180),
+        };
+        store.upsertMessageMetas([meta]);
+        store.saveMessageBody(account.id, sentFolder.id, uid, {
+          html: draft.html,
+          text: draft.text,
+          attachments: [],
+        });
+      }
+    }
+    return result;
+  });
+
+  ipcMain.handle('messages/saveDraft', (_event, draft: DraftInput) => {
+    const account = store.getAccount(draft.accountId);
+    if (!account) return { ok: false, error: '账户不存在' };
+    const draftFolder = store.listFolders(account.id).find((folder) => folder.kind === 'draft');
+    if (!draftFolder) return { ok: false, error: '草稿箱不存在' };
+    const uid = draft.draftId ? Number(draft.draftId.split('/').pop()) : Date.now();
+    const id = `${account.id}/${draftFolder.id}/${uid}`;
+    store.upsertMessageMetas([
+      {
+        id,
+        accountId: account.id,
+        folderId: draftFolder.id,
+        uid,
+        subject: draft.subject || '(无主题)',
+        from: [{ name: account.displayName, address: account.email }],
+        to: draft.to ? [{ address: draft.to }] : [],
+        cc: [],
+        date: Date.now(),
+        size: draft.html.length,
+        flags: ['\\Draft'],
+        hasAttachments: Boolean(draft.attachments?.length),
+        snippet: draft.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 180),
+      },
+    ]);
+    store.saveMessageBody(account.id, draftFolder.id, uid, {
+      html: draft.html,
+      text: draft.text,
+      attachments: [],
+    });
+    return { ok: true, id };
+  });
+
+  /* ------------------------------ 同步 ------------------------------ */
+
+  ipcMain.handle('sync/start', async (_event, accountId: string) => {
+    const account = store.getAccount(accountId);
+    if (!account) return { ok: false, error: '账户不存在' };
+    if (account.demo) {
+      return { ok: false, error: '演示邮箱为本地示例数据，无需同步。可在「设置 → 账户」中添加真实邮箱。' };
+    }
+    const settings = store.getSettings().sync;
+    try {
+      const result = await imapService.syncAccount(
+        account,
+        { days: account.syncDays || settings.days, limit: settings.limit },
+        (progress: SyncProgress) => emit('sync:progress', progress),
+      );
+      emit('mail:changed', {});
+      return { ok: true, ...result };
+    } catch (error) {
+      emit('sync:progress', {
+        accountId,
+        phase: 'error',
+        current: 0,
+        total: 0,
+        message: (error as Error).message,
+      } satisfies SyncProgress);
+      return { ok: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('sync/cancel', (_event, accountId: string) => {
+    imapService.cancel(accountId);
+    return { ok: true };
+  });
+
+  ipcMain.handle('sync/idle', async (_event, accountId: string) => {
+    const account = store.getAccount(accountId);
+    if (!account || account.demo) return { ok: false, error: '演示账户不支持 IDLE' };
+    try {
+      await imapService.startIdle(account, (id) => emit('mail:new', { accountId: id }));
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: (error as Error).message };
+    }
+  });
+
+  /* ------------------------------ 搜索 ------------------------------ */
+
+  ipcMain.handle('search/run', (_event, query: Parameters<typeof runSearch>[0]) => runSearch(query));
+  ipcMain.handle('search/ai', async (_event, text: string) => {
+    const interpretation = await interpretSearch(text);
+    const items = runSearch(interpretation.query);
+    return { ...interpretation, items };
+  });
+
+  /* ------------------------------ AI ------------------------------ */
+
+  ipcMain.handle('ai/test', async (_event, config: Partial<AISettings> & { apiKey?: string }) => {
+    try {
+      const result = await testAIConnection(config);
+      return { ...result };
+    } catch (error) {
+      return { ok: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('ai/summarize', async (_event, messageId: string) => {
+    try {
+      return { ok: true, markdown: await summarizeMessage(messageId) };
+    } catch (error) {
+      return { ok: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('ai/thread', async (_event, threadId: string) => {
+    try {
+      return { ok: true, ...(await summarizeThread(threadId)) };
+    } catch (error) {
+      return { ok: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('ai/analyze', async (_event, params: RangeAnalysisParams) => {
+    try {
+      const result = await analyzeRange(params, {
+        onProgress: (message) => emit('ai:progress', { message }),
+      });
+      return { ok: true, result };
+    } catch (error) {
+      return { ok: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('ai/replies', async (_event, messageId: string) => {
+    try {
+      return { ok: true, suggestions: await suggestReplies(messageId) };
+    } catch (error) {
+      return { ok: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('ai/compose', async (_event, params: ComposeAssistParams) => {
+    try {
+      return { ok: true, text: await composeAssist(params) };
+    } catch (error) {
+      return { ok: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('ai/translate', async (_event, payload: { messageId: string; target: '中文' | 'English' }) => {
+    try {
+      const result = await translateMessage(payload.messageId, payload.target);
+      return { ok: true, text: result.body, subject: result.subject, engine: result.engine };
+    } catch (error) {
+      return { ok: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('ai/triage', async (_event, messageId: string) => {
+    try {
+      return { ok: true, result: await triageMessage(messageId) };
+    } catch (error) {
+      return { ok: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('ai/todos', async (_event, messageId: string) => {
+    try {
+      const drafts = await extractTodosFromMessage(messageId);
+      const meta = store.getMessageMeta(messageId);
+      const items = createTodoItems(drafts, {
+        messageId,
+        sourceSubject: meta?.subject,
+        sourceFrom: meta?.from[0]?.name,
+        folderId: meta?.folderId,
+      });
+      return { ok: true, items, todos: listTodos() };
+    } catch (error) {
+      return { ok: false, error: (error as Error).message };
+    }
+  });
+
+  /* ------------------------------ 简报 ------------------------------ */
+
+  ipcMain.handle('brief/list', (_event, groupId?: string) => listBriefs(groupId));
+
+  ipcMain.handle('brief/get', (_event, id: string) => getBrief(id));
+
+  ipcMain.handle('brief/generate', async (_event, params: BriefGenerateParams) => {
+    try {
+      const brief = await generateBrief(params, {
+        onProgress: (message) => emit('ai:progress', { message }),
+      });
+      emit('brief:generated', brief);
+      return { ok: true, brief };
+    } catch (error) {
+      return { ok: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('brief/remove', (_event, id: string) => removeBrief(id));
+
+  ipcMain.handle('brief/export', async (_event, payload: { id: string; format: 'md' | 'html' | 'docx' }) => {
+    try {
+      const result = await exportBrief(payload.id, payload.format);
+      return { ok: true, ...result };
+    } catch (error) {
+      return { ok: false, error: (error as Error).message };
+    }
+  });
+
+  /* ------------------------------ 待办 ------------------------------ */
+
+  ipcMain.handle('todos/list', () => ({ items: listTodos(), stats: todoStats() }));
+  ipcMain.handle('todos/toggle', (_event, payload: { id: string; done: boolean }) => ({
+    items: toggleTodo(payload.id, payload.done),
+    stats: todoStats(),
+  }));
+  ipcMain.handle('todos/update', (_event, payload: { id: string; patch: Record<string, unknown> }) => ({
+    items: updateTodo(payload.id, payload.patch),
+    stats: todoStats(),
+  }));
+  ipcMain.handle('todos/remove', (_event, id: string) => ({ items: removeTodo(id), stats: todoStats() }));
+  ipcMain.handle('todos/clearCompleted', () => ({ items: clearCompleted(), stats: todoStats() }));
+
+  /* ------------------------------ 设置 ------------------------------ */
+
+  ipcMain.handle('settings/get', () => {
+    const settings = store.getSettings();
+    return {
+      ...settings,
+      ai: { ...settings.ai, hasApiKey: Boolean(store.getAIKey()) },
+    };
+  });
+
+  ipcMain.handle('settings/update', (_event, patch: Partial<AppSettings> & { aiApiKey?: string }) => {
+    const { aiApiKey, ...rest } = patch;
+    if (typeof aiApiKey === 'string') {
+      store.setAIKey(aiApiKey.trim() || undefined);
+    }
+    const updated = store.updateSettings(rest);
+    if (rest.brief?.autoEnabled !== undefined) {
+      if (rest.brief.autoEnabled) startScheduler();
+      else briefScheduler.stop();
+    }
+    return { ...updated, ai: { ...updated.ai, hasApiKey: Boolean(store.getAIKey()) } };
+  });
+
+  /* ------------------------------ 演示数据 ------------------------------ */
+
+  ipcMain.handle('demo/reset', () => {
+    const result = seedDemoData(true);
+    return { ...result, folders: folderViews() };
+  });
+
+  /* ------------------------------ 系统 ------------------------------ */
+
+  /* ------------------------------ 在线更新 ------------------------------ */
+
+  ipcMain.handle('update/state', () => getUpdateState());
+  ipcMain.handle('update/check', async () => checkForUpdates());
+  ipcMain.handle('update/download', async () => downloadUpdate());
+  ipcMain.handle('update/install', () => {
+    quitAndInstall(mainWindow);
+    return { ok: true };
+  });
+
+  ipcMain.handle('dialog/pickFiles', async () => {
+    if (!mainWindow) return [];
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '选择附件',
+      properties: ['openFile', 'multiSelections'],
+    });
+    return result.canceled ? [] : result.filePaths;
+  });
+
+  ipcMain.handle('shell/openPath', async (_event, target: string) => {
+    if (!fs.existsSync(target)) return { ok: false, error: '文件不存在' };
+    const error = await shell.openPath(target);
+    return error ? { ok: false, error } : { ok: true };
+  });
+
+  ipcMain.handle('shell/revealFile', (_event, target: string) => {
+    if (!fs.existsSync(target)) return { ok: false, error: '文件不存在' };
+    shell.showItemInFolder(path.normalize(target));
+    return { ok: true };
+  });
+
+  ipcMain.handle('shell/openExternal', async (_event, url: string) => {
+    if (!/^https?:\/\//i.test(url)) return { ok: false, error: '仅支持打开 http/https 链接' };
+    await shell.openExternal(url);
+    return { ok: true };
+  });
+}
+
+export function startScheduler(): void {
+  briefScheduler.start({
+    onGenerated: (brief) => {
+      emit('brief:generated', brief);
+      emit('mail:changed', {});
+    },
+    onError: (message) => emit('brief:error', { message }),
+  });
+}
+import { checkForUpdates, downloadUpdate, getUpdateState, quitAndInstall } from './services/updater';
