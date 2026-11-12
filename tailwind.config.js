@@ -57,6 +57,7 @@ export default {
         pane: '0 1px 2px rgba(16, 24, 40, 0.06)',
         drawer: '-6px 0 24px rgba(16, 24, 40, 0.12)',
         card: '0 2px 8px rgba(16, 24, 40, 0.08)',
+        menu: '0 6px 18px rgba(16, 24, 40, 0.14)',
       },
       transitionDuration: {
         120: '120ms',

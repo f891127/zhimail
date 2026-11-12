@@ -120,6 +120,22 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
       })()`,
       waitMs: 9000,
     },
+    {
+      name: '08-context',
+      script: `(() => {
+        const rows = Array.from(document.querySelectorAll('div')).filter(
+          (el) => (el.className || '').includes('border-b') && (el.className || '').includes('px-2.5'),
+        );
+        const row = rows.find((el) => (el.textContent || '').includes('11 月产品例会'));
+        if (!row) return false;
+        const rect = row.getBoundingClientRect();
+        row.dispatchEvent(
+          new MouseEvent('contextmenu', { bubbles: true, clientX: rect.left + 150, clientY: rect.top + 18 }),
+        );
+        return true;
+      })()`,
+      waitMs: 2200,
+    },
   ];
 
   for (const view of views) {
@@ -132,93 +148,6 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
     const image = await window.webContents.capturePage();
     fs.writeFileSync(path.join(outDir, `${view.name}.png`), image.toPNG());
     console.log('[screenshot] 已保存', view.name);
-    if (view.name === '02-ai-panel') {
-      const probe = await window.webContents.executeJavaScript(
-        `(() => {
-          const frame = document.querySelector('iframe');
-          if (!frame) return { found: false };
-          let text = '';
-          try { text = (frame.contentDocument && frame.contentDocument.body && frame.contentDocument.body.innerText || '').slice(0, 80); } catch (e) { text = 'err:' + e.message; }
-          const rect = frame.getBoundingClientRect();
-          return { found: true, srcdocLen: (frame.getAttribute('srcdoc') || '').length, text, w: Math.round(rect.width), h: Math.round(rect.height) };
-        })()`,
-      );
-      console.log('[probe]', JSON.stringify(probe));
-    }
   }
   app.quit();
 }
-
-const gotLock = app.requestSingleInstanceLock();
-if (!gotLock) {
-  app.quit();
-} else {
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
-  });
-
-  app.whenReady().then(async () => {
-    nativeTheme.themeSource = 'light';
-    app.setAppUserModelId('com.zhimail.desktop');
-
-    store.init(path.join(app.getPath('userData'), 'zhimail-data'));
-    const settings = store.getSettings();
-    if (!settings.bootstrapped) {
-      seedDemoData(false);
-    }
-
-    registerIpcHandlers();
-    mainWindow = createWindow();
-    setMainWindow(mainWindow);
-
-    // 自动简报调度：仅当用户开启且已配置模型时运行
-    if (store.getSettings().brief.autoEnabled) startScheduler();
-
-    // 在线更新：初始化并转发状态到界面
-    initUpdater();
-    onUpdateState((state) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('update:status', state);
-      }
-    });
-
-    // 真实账户启动时建立 IDLE 长连接，实现新邮件即时到达
-    for (const account of store.listAccounts()) {
-      if (account.demo) continue;
-      try {
-        await imapService.startIdle(account, (accountId) => {
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('mail:new', { accountId });
-          }
-        });
-      } catch (error) {
-        console.warn('[main] IDLE 连接失败', account.email, (error as Error).message);
-      }
-    }
-
-    if (screenshotMode) void runScreenshotMode(mainWindow);
-
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        mainWindow = createWindow();
-        setMainWindow(mainWindow);
-      }
-    });
-  });
-
-  app.on('window-all-closed', () => {
-    void imapService.stopAll();
-    briefScheduler.stop();
-    store.flush();
-    if (process.platform !== 'darwin') app.quit();
-  });
-
-  app.on('before-quit', () => {
-    briefScheduler.stop();
-    store.flush();
-  });
-}
-import { initUpdater, onUpdateState } from './services/updater';

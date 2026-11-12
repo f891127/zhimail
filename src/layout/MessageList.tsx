@@ -2,8 +2,10 @@
 
 import { useAppStore } from '@/store/useAppStore';
 import { Icon } from '@/components/Icon';
+import { ContextMenu, type ContextMenuItem } from '@/components/ContextMenu';
 import { listTime, senderName, addressLabel } from '@/lib/format';
 import type { MessageMeta } from '@/types/zhimail';
+import { useState } from 'react';
 
 function UnreadDot({ unread }: { unread: boolean }) {
   return (
@@ -32,7 +34,15 @@ function StarCell({ flagged, onToggle }: { flagged: boolean; onToggle: () => voi
   );
 }
 
-function MessageRow({ message, active }: { message: MessageMeta; active: boolean }) {
+function MessageRow({
+  message,
+  active,
+  onContext,
+}: {
+  message: MessageMeta;
+  active: boolean;
+  onContext: (event: React.MouseEvent, message: MessageMeta) => void;
+}) {
   const store = useAppStore();
   const unread = !message.flags.includes('\\Seen');
   const flagged = message.flags.includes('\\Flagged');
@@ -42,6 +52,7 @@ function MessageRow({ message, active }: { message: MessageMeta; active: boolean
   return (
     <div
       onClick={() => void store.selectMessage(message.id)}
+      onContextMenu={(event) => onContext(event, message)}
       className={`group flex cursor-default items-start gap-2 border-b border-shell-lineSoft px-2.5 ${
         density === 'compact' ? 'py-[7px]' : 'py-[11px]'
       } transition-colors duration-120 ${
@@ -103,7 +114,13 @@ function MessageRow({ message, active }: { message: MessageMeta; active: boolean
   );
 }
 
-function ThreadRow({ thread }: { thread: ReturnType<typeof useAppStore.getState>['threads'][number] }) {
+function ThreadRow({
+  thread,
+  onContext,
+}: {
+  thread: ReturnType<typeof useAppStore.getState>['threads'][number];
+  onContext: (event: React.MouseEvent, message: MessageMeta) => void;
+}) {
   const store = useAppStore();
   const expanded = store.expandedThreadIds.includes(thread.threadId);
   const active = thread.messages.some((message) => message.id === store.selectedMessageId);
@@ -113,6 +130,7 @@ function ThreadRow({ thread }: { thread: ReturnType<typeof useAppStore.getState>
     <div>
       <div
         onClick={() => void store.selectMessage(latest.id)}
+        onContextMenu={(event) => onContext(event, latest)}
         className={`group flex cursor-default items-start gap-2 border-b border-shell-lineSoft px-2.5 py-[8px] transition-colors duration-120 ${
           active ? 'bg-brand-50' : thread.unread > 0 ? 'bg-white' : 'bg-[#fcfcfd] hover:bg-brand-50/50'
         }`}
@@ -152,7 +170,11 @@ function ThreadRow({ thread }: { thread: ReturnType<typeof useAppStore.getState>
       {expanded &&
         thread.messages.map((message) => (
           <div key={message.id} className="pl-5">
-            <MessageRow message={message} active={message.id === store.selectedMessageId} />
+            <MessageRow
+              message={message}
+              active={message.id === store.selectedMessageId}
+              onContext={onContext}
+            />
           </div>
         ))}
     </div>
@@ -165,6 +187,60 @@ export function MessageList() {
     store;
 
   const folder = store.folders.find((item) => item.id === selectedFolderId);
+  const [menu, setMenu] = useState<{ x: number; y: number; message: MessageMeta } | null>(null);
+
+  const openContextMenu = (event: React.MouseEvent, message: MessageMeta) => {
+    event.preventDefault();
+    if (store.selectedMessageId !== message.id) void store.selectMessage(message.id);
+    setMenu({ x: event.clientX, y: event.clientY, message });
+  };
+
+  const moveTargets = store.folders
+    .filter((item) => !['drafts', 'sent', 'outbox'].includes(item.kind) && item.id !== menu?.message.folderId)
+    .slice(0, 12)
+    .map<ContextMenuItem>((item) => ({
+      label: item.name,
+      onClick: () => void store.moveMessages([menu!.message.id], item.id),
+    }));
+
+  const menuItems: ContextMenuItem[] = menu
+    ? [
+        {
+          label: 'AI 摘要这封邮件',
+          onClick: () => void store.runSummarize(menu.message.id),
+        },
+        {
+          label: '提取待办事项',
+          onClick: () => void store.extractTodosFromMessage(menu.message.id),
+        },
+        { divider: true },
+        {
+          label: menu.message.flags.includes('\\Seen') ? '标记为未读' : '标记为已读',
+          onClick: () =>
+            void store.toggleFlag(
+              [menu.message.id],
+              '\\Seen',
+              !menu.message.flags.includes('\\Seen'),
+            ),
+        },
+        {
+          label: menu.message.flags.includes('\\Flagged') ? '取消星标' : '加星标',
+          onClick: () =>
+            void store.toggleFlag(
+              [menu.message.id],
+              '\\Flagged',
+              !menu.message.flags.includes('\\Flagged'),
+            ),
+        },
+        { divider: true },
+        { label: '回复', shortcut: 'Ctrl+R', onClick: () => store.replyToMessage('reply') },
+        { label: '回复全部', onClick: () => store.replyToMessage('replyAll') },
+        { label: '转发', onClick: () => store.replyToMessage('forward') },
+        { divider: true },
+        { label: '移动到…', submenu: moveTargets.length ? moveTargets : [{ label: '无可用目标', disabled: true }] },
+        { label: '删除', danger: true, shortcut: 'Delete', onClick: () => void store.deleteMessages([menu.message.id]) },
+      ]
+    : [];
 
   return (
     <div className="flex h-full min-w-0 flex-col bg-white">
@@ -265,15 +341,20 @@ export function MessageList() {
         )}
         {!loadingMessages &&
           (threadMode
-            ? threads.map((thread) => <ThreadRow key={thread.threadId} thread={thread} />)
+            ? threads.map((thread) => (
+                <ThreadRow key={thread.threadId} thread={thread} onContext={openContextMenu} />
+              ))
             : messages.map((message) => (
                 <MessageRow
                   key={message.id}
                   message={message}
                   active={message.id === store.selectedMessageId}
+                  onContext={openContextMenu}
                 />
               )))}
       </div>
+
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />}
     </div>
   );
 }
