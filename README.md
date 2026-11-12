@@ -127,6 +127,12 @@ scripts/
 - 结构：`state.json`（账户、文件夹、设置、待办、简报索引）、`messages/<账户>/<文件夹>/<uid>.json`（正文）、`briefs/`、`attachments/`、`secrets.json`（加密凭据）。
 - 除主动触发的 AI 请求与邮件服务器通信外，应用不向任何第三方发送数据；无遥测。
 
+## 下载与发布
+
+- 安装包（NSIS，中文安装界面、可选安装目录、桌面与开始菜单快捷方式）：GitHub Release `v1.0.0` 的 `ZhiMail-Setup-1.0.0-x64.exe`（约 81MB）。
+- 免安装版：`ZhiMail-1.0.0-x64-portable.zip`，解压后运行 `ZhiMail.exe`。
+- 发布页：https://github.com/f891127/zhimail/releases/tag/v1.0.0
+
 ## 在线更新与发布
 
 1. `electron-builder.yml` 已配置 `publish: github (f891127/zhimail)`，打包时生成 `latest.yml`。
