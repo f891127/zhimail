@@ -24,6 +24,7 @@ app.whenReady().then(async () => {
     const briefService = require('../dist-electron/services/brief');
     const todoService = require('../dist-electron/services/todo');
     const { groupThreads } = require('../dist-electron/services/thread');
+    const translateService = require('../dist-electron/services/translate');
 
     const dataDir = path.join(os.tmpdir(), `zhimail-e2e-${Date.now()}`);
     store.init(dataDir);
@@ -119,7 +120,23 @@ app.whenReady().then(async () => {
 
     // 12. 翻译
     const translated = await tasks.translateMessage(longMail.id, 'English');
-    check('邮件翻译', translated.length > 10, `len=${translated.length}`);
+    check(
+      '邮件翻译（大模型）',
+      translated.body.length > 10 && translated.engine === 'llm',
+      `len=${translated.body.length} engine=${translated.engine}`,
+    );
+
+    // 12b. 内置免费翻译引擎（无需 API Key）
+    const builtin = await translateService.translateText(
+      'The chamber door must not be pressurized until the locking mechanism is engaged.',
+      '中文',
+      'builtin',
+    );
+    check(
+      '内置免费翻译引擎',
+      builtin.engine === 'builtin' && builtin.text.length > 4,
+      `engine=${builtin.engine} text=${builtin.text.slice(0, 20)}`,
+    );
 
     // 13. 调度周期计算
     const { computePeriod } = require('../dist-electron/services/scheduler');

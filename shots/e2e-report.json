@@ -1,0 +1,137 @@
+[
+  {
+    "name": "演示数据播种",
+    "ok": true,
+    "detail": "account=1"
+  },
+  {
+    "name": "收件箱文件夹存在",
+    "ok": true,
+    "detail": "demo-account:inbox"
+  },
+  {
+    "name": "收件箱邮件数",
+    "ok": true,
+    "detail": "count=15"
+  },
+  {
+    "name": "AI 连接测试",
+    "ok": true,
+    "detail": "知邮 AI 连接正常。"
+  },
+  {
+    "name": "长邮件摘要",
+    "ok": true,
+    "detail": "len=310"
+  },
+  {
+    "name": "会话串摘要",
+    "ok": true,
+    "detail": "count=3"
+  },
+  {
+    "name": "区间汇总分析",
+    "ok": true,
+    "detail": "total=17 batches=1"
+  },
+  {
+    "name": "汇总内待办抽取",
+    "ok": true,
+    "detail": "todos=3"
+  },
+  {
+    "name": "简报生成并入库",
+    "ok": true,
+    "detail": "brief-1794496445321-e5a39b todos=3"
+  },
+  {
+    "name": "简报进入「邮件简报」分组",
+    "ok": true,
+    "detail": "briefs/weekly"
+  },
+  {
+    "name": "简报分组查询",
+    "ok": true,
+    "detail": "count=2"
+  },
+  {
+    "name": "简报导出 MD",
+    "ok": true,
+    "detail": "E2E 测试周报.md 2367B"
+  },
+  {
+    "name": "简报导出 HTML",
+    "ok": true,
+    "detail": "E2E 测试周报.html 4754B"
+  },
+  {
+    "name": "简报导出 DOCX",
+    "ok": true,
+    "detail": "E2E 测试周报.docx 11926B"
+  },
+  {
+    "name": "docx 为合法 ZIP 包（可编辑 Word）",
+    "ok": true,
+    "detail": "PK"
+  },
+  {
+    "name": "单封邮件待办提取",
+    "ok": true,
+    "detail": "count=3"
+  },
+  {
+    "name": "待办持久化",
+    "ok": true,
+    "detail": "total=11"
+  },
+  {
+    "name": "一键回复建议（3 条）",
+    "ok": true,
+    "detail": "正式/简洁/友好"
+  },
+  {
+    "name": "重要度判定",
+    "ok": true,
+    "detail": "high/high"
+  },
+  {
+    "name": "智能搜索解析",
+    "ok": true,
+    "detail": "检索近两周内与「灭菌验证」相关的邮件"
+  },
+  {
+    "name": "写作辅助（润色）",
+    "ok": true,
+    "detail": "len=71"
+  },
+  {
+    "name": "邮件翻译（大模型）",
+    "ok": true,
+    "detail": "len=11 engine=llm"
+  },
+  {
+    "name": "内置免费翻译引擎",
+    "ok": true,
+    "detail": "engine=builtin text=在锁定机构啮合之前，不得对腔室门施加压力"
+  },
+  {
+    "name": "自动简报周期计算（日）",
+    "ok": true,
+    "detail": "2026-11-11~2026-11-11"
+  },
+  {
+    "name": "自动简报周期计算（周）",
+    "ok": true,
+    "detail": "7天"
+  },
+  {
+    "name": "自动简报周期计算（月）",
+    "ok": true,
+    "detail": "31天"
+  },
+  {
+    "name": "本地状态落盘",
+    "ok": true,
+    "detail": "29.3KB"
+  }
+]
