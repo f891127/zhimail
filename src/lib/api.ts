@@ -233,6 +233,12 @@ const mockApi: ZhimailApi = {
     download: notAvailable,
     install: notAvailable,
     openInstaller: async () => ({ ok: false, error: '浏览器预览模式不支持' }),
+    testSource: async (url: string) => ({
+      ok: false,
+      feedUrl: url,
+      latencyMs: 0,
+      error: '浏览器预览模式无法测试更新源',
+    }),
     openRelease: async () => false,
   },
   on: () => () => undefined,

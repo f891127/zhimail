@@ -193,6 +193,12 @@ function classifyUpdateError(raw: string): 'network' | 'not-found' | 'other' {
 }
 
 export async function checkForUpdates(): Promise<UpdateState> {
+  // 下载或安装进行中不要再触发检查：electron-updater 会直接拒绝这次调用，
+  // 界面上就表现为「点了在线更新没反应」。直接把当前进度回给界面。
+  if (state.phase === 'downloading' || state.phase === 'downloaded' || state.phase === 'installing') {
+    return state;
+  }
+  if (state.phase === 'checking') return state;
   if (!app.isPackaged) {
     setState({
       phase: 'unsupported',
@@ -294,7 +300,8 @@ export function installUpdate(): { ok: boolean; error?: string } {
   installing = true;
   setState({ phase: 'installing', error: undefined });
 
-  // 先让界面把安装遮罩画出来，再退出进程启动安装程序（否则窗口会先消失，用户看不到任何反馈）
+  // 先让界面把安装遮罩画出来，再退出进程启动安装程序（否则窗口会先消失，用户看不到任何反馈）。
+  // 400ms 足够画一帧，等待越久用户越觉得「点安装卡住」。
   setTimeout(() => {
     try {
       autoUpdater.quitAndInstall(true, true);
@@ -317,4 +324,112 @@ export function installUpdate(): { ok: boolean; error?: string } {
   if (typeof timer.unref === 'function') timer.unref();
 
   return { ok: true };
+}
+
+
+/**
+ * 把用户填的地址规范成「latest.yml 所在目录」。
+ * GitHub 官方与镜像常见的几种写法都要能认：
+ *   （空）                    -> .../releases/latest/download
+ *   .../releases/latest       -> .../releases/latest/download
+ *   .../releases/tag/v1.2.0   -> .../releases/download/v1.2.0
+ *   .../releases/latest/download（已正确，原样保留）
+ */
+function normalizeFeedBase(rawUrl: string): string {
+  let base = (rawUrl || `${RELEASE_URL}/download`).trim().replace(/\/+$/, '');
+  if (/\/releases\/latest$/i.test(base)) base = `${base}/download`;
+  else if (/\/releases\/tag\/[^/]+$/i.test(base)) base = base.replace(/\/releases\/tag\//i, '/releases/download/');
+  else if (/\/releases$/i.test(base)) base = `${base}/latest/download`;
+  return base;
+}
+
+/** 「测试更新源」的结果：能拿到 latest.yml 就说明这个地址可用 */
+export interface UpdateSourceTest {
+  ok: boolean;
+  feedUrl: string;
+  version?: string;
+  installer?: string;
+  latencyMs: number;
+  /** 安装包是否也能取到（只发 HEAD，失败不算致命） */
+  installerOk?: boolean;
+  error?: string;
+  hint?: string;
+}
+
+/**
+ * 测试更新源：按 electron-updater 的 generic 约定，取 `<base>/latest.yml`。
+ * 这里不启动真实更新流程，只做一次带超时的探测，让用户先确认地址是否可达。
+ */
+export async function testUpdateSource(rawUrl: string): Promise<UpdateSourceTest> {
+  const base = normalizeFeedBase(rawUrl);
+  const feedUrl = `${base}/latest.yml`;
+  const started = Date.now();
+  const withTimeout = async (url: string, ms: number, method = 'GET') => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ms);
+    try {
+      return await fetch(url, { method, signal: controller.signal, redirect: 'follow' });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  try {
+    const response = await withTimeout(feedUrl, 15_000);
+    const latencyMs = Date.now() - started;
+    if (response.status === 404) {
+      return {
+        ok: false,
+        feedUrl,
+        latencyMs,
+        error: `地址可访问，但该路径下没有 latest.yml（HTTP 404）`,
+        hint: '确认地址指向 releases/latest/download 这一级；镜像请保留完整的 GitHub 原始地址。',
+      };
+    }
+    if (!response.ok) {
+      return { ok: false, feedUrl, latencyMs, error: `读取 latest.yml 失败（HTTP ${response.status}）` };
+    }
+    const text = await response.text();
+    const version = /^version:\s*(.+)$/m.exec(text)?.[1]?.trim();
+    const installer = /^\s*-?\s*url:\s*(.+)$/m.exec(text)?.[1]?.trim();
+    if (!version) {
+      return {
+        ok: false,
+        feedUrl,
+        latencyMs,
+        error: '返回内容不是有效的 latest.yml',
+        hint: '这个地址可能被重定向到 HTML 页面（例如镜像的登录页或错误页）。',
+      };
+    }
+    let installerOk: boolean | undefined;
+    if (installer) {
+      try {
+        const head = await withTimeout(`${base}/${installer}`, 15_000, 'HEAD');
+        installerOk = head.ok;
+      } catch {
+        installerOk = false;
+      }
+    }
+    return {
+      ok: true,
+      feedUrl,
+      version,
+      installer,
+      latencyMs,
+      installerOk,
+      hint:
+        installerOk === false
+          ? '清单可读，但安装包暂时取不到（镜像可能尚未缓存），正式更新时可能失败。'
+          : undefined,
+    };
+  } catch (error) {
+    const message = String((error as Error).message || error);
+    const aborted = /abort/i.test(message);
+    return {
+      ok: false,
+      feedUrl,
+      latencyMs: Date.now() - started,
+      error: aborted ? '请求超时（15 秒无响应）' : message.slice(0, 200),
+      hint: '常见原因是本机无法直连该地址，换一个镜像或使用代理后重试。',
+    };
+  }
 }

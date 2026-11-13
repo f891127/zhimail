@@ -201,6 +201,8 @@ export interface AppSystemState extends AppBehaviorSettings {
 }
 
 export interface AttachmentDataResult {
+  /** PDF 等大文件通过私有协议读取时的地址 */
+  url?: string;
   ok: boolean;
   error?: string;
   kind?: 'image' | 'pdf' | 'text' | 'docx' | 'sheet' | 'slides' | 'other';
@@ -447,7 +449,13 @@ export interface ZhimailApi {
       bytes?: number;
       error?: string;
     }>;
-    dataSize: (options?: { force?: boolean }) => Promise<{ dataDir: string; bytes: number; files: number; cached?: boolean }>;
+    dataSize: (options?: { force?: boolean }) => Promise<{
+      dataDir: string;
+      bytes: number;
+      files: number;
+      cached?: boolean;
+      partial?: boolean;
+    }>;
     resetDataDir: () => Promise<{ dataDir: string }>;
     relaunch: () => Promise<boolean>;
     system: () => Promise<AppSystemState>;
@@ -619,6 +627,16 @@ export interface ZhimailApi {
     check: () => Promise<UpdateState>;
     download: () => Promise<UpdateState>;
     install: () => Promise<{ ok: boolean; error?: string }>;
+    testSource: (url: string) => Promise<{
+      ok: boolean;
+      feedUrl: string;
+      version?: string;
+      installer?: string;
+      latencyMs: number;
+      installerOk?: boolean;
+      error?: string;
+      hint?: string;
+    }>;
     openInstaller: () => Promise<{ ok: boolean; path?: string; error?: string }>;
     openRelease: () => Promise<boolean>;
   };

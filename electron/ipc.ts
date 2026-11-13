@@ -4,6 +4,7 @@ import { BrowserWindow, dialog, ipcMain, shell, app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { store } from './services/store';
+import { attachmentPreviewUrl } from './services/attachmentServer';
 import type { AppLocale } from './services/types';
 import { applyAppBehavior, getDefaultMailClientStatus, setDefaultMailClient } from './services/system';
 import { fetchBalance, resetBalanceCache, testBalance } from './services/ai/balance';
@@ -39,6 +40,7 @@ import {
   getUpdateState,
   installUpdate,
   openDownloadedInstaller,
+  testUpdateSource,
   RELEASE_URL,
 } from './services/updater';
 import {
@@ -297,9 +299,14 @@ function writeRedeocodeLog(entry: Record<string, unknown>): void {
  */
 let dataSizeCache: { dataDir: string; bytes: number; files: number; at: number } | null = null;
 
-export async function computeDataSize(root: string): Promise<{ bytes: number; files: number }> {
+export async function computeDataSize(
+  root: string,
+  budgetMs = 4000,
+): Promise<{ bytes: number; files: number; partial: boolean }> {
   let bytes = 0;
   let files = 0;
+  let partial = false;
+  const deadline = Date.now() + budgetMs;
   const queue: string[] = [root];
   let ticks = 0;
   while (queue.length) {
@@ -324,17 +331,25 @@ export async function computeDataSize(root: string): Promise<{ bytes: number; fi
         }
       }
       ticks += 1;
-      if (ticks % 200 === 0) await new Promise((resolve) => setImmediate(resolve));
+      if (ticks % 200 === 0) {
+        await new Promise((resolve) => setImmediate(resolve));
+        // 目录特别大（或数据目录被指到网络盘）时不能无限等，先返回已统计的部分
+        if (Date.now() > deadline) {
+          partial = true;
+          break;
+        }
+      }
     }
+    if (partial) break;
   }
-  return { bytes, files };
+  return { bytes, files, partial };
 }
 
 /** 启动后在后台预热一次，用户打开「数据与备份」时直接命中缓存 */
 export async function warmDataSize(): Promise<void> {
   try {
     const root = store.root;
-    const result = await computeDataSize(root);
+    const result = await computeDataSize(root, 8000);
     dataSizeCache = { dataDir: root, bytes: result.bytes, files: result.files, at: Date.now() };
   } catch {
     /* 预热失败不影响使用 */
@@ -358,13 +373,22 @@ export function registerIpcHandlers(): void {
   /** 统计数据目录占用：文件数与字节数（邮件正文、附件、简报都在里面） */
   ipcMain.handle('app/dataSize', async (_event, options?: { force?: boolean }) => {
     const root = store.root;
-    // 目录可能很大（上万封邮件的正文与附件），缓存 30 秒，避免每次打开设置都全盘遍历
-    if (!options?.force && dataSizeCache && dataSizeCache.dataDir === root && Date.now() - dataSizeCache.at < 30_000) {
-      return { dataDir: root, bytes: dataSizeCache.bytes, files: dataSizeCache.files, cached: true };
+    // 目录可能很大（上万封邮件的正文与附件），缓存 5 分钟，避免每次打开设置都全盘遍历
+    if (!options?.force && dataSizeCache && dataSizeCache.dataDir === root && Date.now() - dataSizeCache.at < 300_000) {
+      return { dataDir: root, bytes: dataSizeCache.bytes, files: dataSizeCache.files, cached: true, partial: false };
     }
-    const result = await computeDataSize(root);
-    dataSizeCache = { dataDir: root, bytes: result.bytes, files: result.files, at: Date.now() };
-    return { dataDir: root, bytes: result.bytes, files: result.files, cached: false };
+    // 最多算 4 秒，超出就先返回已统计的部分，界面不会一直卡在「统计中」
+    const result = await computeDataSize(root, 4000);
+    if (!result.partial) {
+      dataSizeCache = { dataDir: root, bytes: result.bytes, files: result.files, at: Date.now() };
+    }
+    return {
+      dataDir: root,
+      bytes: result.bytes,
+      files: result.files,
+      cached: false,
+      partial: result.partial,
+    };
   });
 
   /* ------------------------------ 账户 ------------------------------ */
@@ -1003,11 +1027,14 @@ export function registerIpcHandlers(): void {
         };
       }
       if (ext === '.pdf') {
+        // 不用 base64 data URL（9 MB 的 PDF 会变成 12 MB 字符串，还会被长度限制拦掉），
+        // 也不用 file://（父页面本身就是 file://，Chromium 会拦掉跨文件嵌入）。
+        // 改由本机回环服务托管，内置 PDF 阅读器才能正常分页渲染。
         return {
           ok: true,
           kind: 'pdf',
           mime: 'application/pdf',
-          dataUrl: `data:application/pdf;base64,${fs.readFileSync(file).toString('base64')}`,
+          url: await attachmentPreviewUrl(file),
         };
       }
       if (['.txt', '.log', '.md', '.json', '.xml', '.htm', '.html'].includes(ext)) {
@@ -1056,6 +1083,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('update/state', () => getUpdateState());
   ipcMain.handle('update/check', async () => checkForUpdates());
   ipcMain.handle('update/download', async () => downloadUpdate());
+  ipcMain.handle('update/testSource', (_event, url: string) => testUpdateSource(url))
+
   ipcMain.handle('update/install', () => installUpdate());
   ipcMain.handle('update/openInstaller', () => openDownloadedInstaller());
 

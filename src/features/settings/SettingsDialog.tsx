@@ -220,10 +220,41 @@ export function SettingsDialog() {
   // 直接读取已保存的设置，保证选中状态持续显示
   const savedSource = settings?.update?.source ?? 'github';
   const savedUrl = (settings?.update?.customUrl ?? '').trim();
+  // 「测试」结果：只反映最近一次探测，不写进设置
+  const [sourceTest, setSourceTest] = useState<{
+    ok: boolean;
+    feedUrl: string;
+    version?: string;
+    latencyMs: number;
+    installerOk?: boolean;
+    error?: string;
+    hint?: string;
+  } | null>(null);
+  const [testingSource, setTestingSource] = useState(false);
 
   useEffect(() => {
     setCustomUrl(settings?.update?.customUrl ?? '');
   }, [settings?.update?.customUrl]);
+
+  /** 测试当前输入的更新源能否取到 latest.yml */
+  const testUpdateSource = async () => {
+    const target = (customUrl || savedUrl || '').trim();
+    setTestingSource(true);
+    setSourceTest(null);
+    try {
+      const result = await api.update.testSource(target);
+      setSourceTest(result);
+    } catch (error) {
+      setSourceTest({
+        ok: false,
+        feedUrl: target,
+        latencyMs: 0,
+        error: (error as Error).message,
+      });
+    } finally {
+      setTestingSource(false);
+    }
+  };
 
   /** 立即保存更新源（选中即生效，不用再点保存按钮） */
   const saveUpdateSource = async (
@@ -249,14 +280,19 @@ export function SettingsDialog() {
   };
 
   // 数据目录占用
-  const [dataSize, setDataSize] = useState<{ bytes: number; files: number } | null>(null);
+  const [dataSize, setDataSize] = useState<{ bytes: number; files: number; partial?: boolean } | null>(null);
   const [sizeLoading, setSizeLoading] = useState(false);
   const loadDataSize = async (force = false) => {
     setSizeLoading(true);
     try {
-      const result = await api.app.dataSize(force ? { force: true } : undefined);
-      setDataSize({ bytes: result.bytes, files: result.files });
+      // 主进程最多算 4 秒就会返回部分结果；这里再兜一层，避免异常时界面永远停在「统计中」
+      const result = await Promise.race([
+        api.app.dataSize(force ? { force: true } : undefined),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('统计超时，请点「刷新」重试')), 12_000)),
+      ]);
+      setDataSize({ bytes: result.bytes, files: result.files, partial: result.partial });
     } catch (error) {
+      setDataSize((current) => current ?? { bytes: 0, files: 0, partial: true });
       store.pushToast({ type: 'error', title: '统计占用空间失败', message: (error as Error).message });
     } finally {
       setSizeLoading(false);
@@ -1439,6 +1475,9 @@ export function SettingsDialog() {
                         已占用：
                         <span className="font-medium tabular-nums text-shell-text">
                           {dataSize ? formatBytes(dataSize.bytes) : '统计中…'}
+                          {dataSize?.partial && (
+                            <span className="ml-1 text-[11px] text-amber-700">（部分，目录较大，点刷新继续统计）</span>
+                          )}
                         </span>
                       </span>
                       {dataSize && <span className="text-shell-faint">{dataSize.files} 个文件</span>}
@@ -1771,10 +1810,46 @@ export function SettingsDialog() {
                     <button type="button" className="ghost-btn" onClick={() => void saveUpdateSource({ source: savedSource })}>
                       保存更新源
                     </button>
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      disabled={testingSource}
+                      onClick={() => void testUpdateSource()}
+                    >
+                      {testingSource ? '测试中…' : '测试'}
+                    </button>
                     <span className="text-[11px] text-shell-faint">
                       当前：{savedSource === 'custom' ? describeSource(savedUrl) : 'GitHub 官方'}
                     </span>
                   </div>
+                  {sourceTest && (
+                    <div
+                      className={`mt-2 rounded border px-2.5 py-2 text-[11px] leading-5 ${
+                        sourceTest.ok
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                          : 'border-rose-200 bg-rose-50 text-rose-700'
+                      }`}
+                    >
+                      <div className="flex items-start gap-1.5">
+                        <Icon name={sourceTest.ok ? 'check-circle' : 'alert'} size={12} className="mt-1 shrink-0" />
+                        <div className="min-w-0">
+                          {sourceTest.ok ? (
+                            <>
+                              可访问：最新版本 v{sourceTest.version}，耗时 {sourceTest.latencyMs} ms
+                              {sourceTest.installerOk === false && '；安装包暂不可取（镜像可能未缓存）'}
+                              {sourceTest.installerOk && '；安装包可下载'}
+                            </>
+                          ) : (
+                            <>
+                              无法使用：{sourceTest.error}
+                              {sourceTest.hint ? ` —— ${sourceTest.hint}` : ''}
+                            </>
+                          )}
+                          <div className="mt-0.5 break-all text-[10px] opacity-70">探测地址：{sourceTest.feedUrl}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <p className="text-[11px] leading-5 text-shell-faint">
                   更新包发布在 GitHub Releases（f891127/zhimail）。客户端通过 latest.yml 比对版本，仅下载差异部分。
@@ -1787,7 +1862,7 @@ export function SettingsDialog() {
                 <div>
                   <div className="text-base font-semibold text-brand-800">智邮 ZhiYou v{info?.version ?? '1.0.0'}</div>
                   <div className="text-[11px] text-shell-sub">
-                    Foxmail 风格的桌面邮件客户端，内置 AI 汇总、简报与待办能力。
+                    智能桌面邮件客户端，内置AI汇总、简报与待办能力。
                   </div>
                 </div>
 

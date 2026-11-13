@@ -126,6 +126,7 @@ const api = {
     check: () => invoke('update/check'),
     download: () => invoke('update/download'),
     install: () => invoke('update/install'),
+    testSource: (url: string) => invoke('update/testSource', url),
     openInstaller: () => invoke('update/openInstaller'),
     openRelease: () => invoke('update/openRelease'),
   },

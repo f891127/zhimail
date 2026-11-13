@@ -1,6 +1,7 @@
 /** 附件预览：图片 / PDF / 文本直接在客户端内查看，其它类型提示保存到本地打开 */
 import { useEffect, useState } from 'react';
 import { Icon } from '@/components/Icon';
+import { PdfViewer } from '@/components/PdfViewer';
 import { api } from '@/lib/api';
 import { fileSize } from '@/lib/format';
 import type { AttachmentDataResult } from '@/types/zhimail';
@@ -122,7 +123,7 @@ export function AttachmentPreview({
           )}
 
           {!state.loading && state.result?.kind === 'pdf' && (
-            <iframe title={filename} src={state.result.dataUrl} className="h-full w-full border-0 bg-white" />
+            <PdfViewer url={state.result.url ?? state.result.dataUrl ?? ''} filename={filename} />
           )}
 
           {!state.loading && state.result?.kind === 'text' && (

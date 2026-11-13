@@ -1189,6 +1189,12 @@ export const useAppStore = create<State>((set, get) => ({
     }
   },
   checkUpdate: async () => {
+    const phase = get().updateState?.phase;
+    // 正在下载/已下载/安装中：只把进度窗口打开，不再发起新的检查（否则点了没反应）
+    if (phase === 'downloading' || phase === 'downloaded' || phase === 'installing') {
+      get().openUpdateDialog();
+      return;
+    }
     const state = await api.update.check();
     set({ updateState: state });
     if (state.phase === 'not-available') {

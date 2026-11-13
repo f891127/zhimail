@@ -9,6 +9,7 @@ import { resolveDataDir } from './services/location';
 import { maybeAutoBackup } from './services/backup';
 import { registerIpcHandlers, setMainWindow, startAutoReceive, startScheduler, warmDataSize } from './ipc';
 import { seedDemoData } from './services/demo';
+import { stopAttachmentServer } from './services/attachmentServer';
 import { imapService } from './services/imap';
 import { briefScheduler } from './services/scheduler';
 import {
@@ -276,6 +277,21 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
       })()`,
       waitMs: 5600,
     },
+    {
+      name: '18-pdf-preview',
+      script: `(() => {
+        window.__zhimailDev?.showMail?.();
+        window.__zhimailDev?.selectBySubject?.('评审');
+        setTimeout(() => {
+          const chip = Array.from(document.querySelectorAll('button')).find((el) =>
+            (el.textContent || '').includes('.pdf'),
+          );
+          if (chip) chip.click();
+        }, 2600);
+        return true;
+      })()`,
+      waitMs: 11000,
+    },
     { name: '02-ai-panel', script: 'window.__zhimailDev?.showAI?.()' },
     {
       name: '02b-analysis',
@@ -288,6 +304,28 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
     },
     { name: '03-briefs', script: 'window.__zhimailDev?.showBriefs?.()' },
     { name: '04-todos', script: 'window.__zhimailDev?.showTodos?.()' },
+    {
+      name: '06b-update-test',
+      script: `(async () => {
+        window.__zhimailDev?.showSettings?.('update');
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.trim() === '测试');
+        button?.click();
+        return Boolean(button);
+      })()`,
+      waitMs: 4200,
+    },
+    {
+      name: '19-about',
+      script: `(async () => {
+        for (let index = 0; index < 30 && !window.__zhimailDev; index += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        window.__zhimailDev?.showSettings?.('about');
+        return true;
+      })()`,
+      waitMs: 2600,
+    },
     { name: '05-settings', script: 'window.__zhimailDev?.showSettings?.()' },
     {
       name: '06-update',
@@ -641,6 +679,7 @@ if (!gotLock) {
   });
 
   app.on('before-quit', () => {
+    stopAttachmentServer();
     (app as unknown as { isQuitting?: boolean }).isQuitting = true;
     briefScheduler.stop();
     store.flush();
