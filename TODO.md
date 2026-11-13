@@ -105,9 +105,14 @@
 - [x] `.github/workflows/release.yml`：推送 `v*` 标签时在 windows-latest 构建 NSIS 安装包并发布 Release。
 - 证据：`electron/services/updater.ts`、`shots/06-update.png`。
 
+### 21. 发版流程与版本历史
+- [x] 每次发版同时更新 `package.json` 版本号与 `CHANGELOG.md` 对应小节，二者是客户端日志、更新清单与 Release 说明的唯一来源。
+- [x] 已发布版本：v1.0.0（首个版本）、v1.1.0（内置版本更新日志）、v1.1.1 与 v1.1.2（更新清单写入版本说明）。
+- 证据：https://github.com/f891127/zhimail/releases
+
 ### 20. 构建产物与仓库
 - [x] 代码推送至 GitHub 公开仓库 https://github.com/f891127/zhimail （完整源码、README、CHANGELOG、MIT 许可证、工作流）。
-- [x] 本地产出免安装便携包 `release/ZhiMail-1.1.0-x64-portable.zip`（解压即用）。
+- [x] 本地产出免安装便携包 `ZhiMail-1.1.2-x64-portable.zip`（解压即用）。
 - [x] NSIS 安装包由 GitHub Actions 的 Windows runner 构建（本沙箱为 ARM Linux，wine32 不可用，无法本地生成 NSIS）。
 
 ## 后续可做
