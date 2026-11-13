@@ -130,6 +130,7 @@ const api = {
     download: () => invoke('update/download'),
     install: () => invoke('update/install'),
     testSource: (url: string) => invoke('update/testSource', url),
+    speedTest: () => invoke('update/speedTest'),
     openInstaller: () => invoke('update/openInstaller'),
     openRelease: () => invoke('update/openRelease'),
   },

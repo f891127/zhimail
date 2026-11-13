@@ -496,3 +496,105 @@ export async function testUpdateSource(rawUrl: string): Promise<UpdateSourceTest
     };
   }
 }
+
+/* ------------------------- 更新源测速 ------------------------- */
+
+/** 各更新源（镜像）候选：都以同一份 GitHub Release 资产为源 */
+const SPEED_BASES = [
+  { label: 'GitHub 官方', base: 'https://github.com/f891127/zhimail/releases/latest/download' },
+  {
+    label: 'gh-proxy.com',
+    base: 'https://gh-proxy.com/https://github.com/f891127/zhimail/releases/latest/download',
+  },
+  {
+    label: 'ghfast.top',
+    base: 'https://ghfast.top/https://github.com/f891127/zhimail/releases/latest/download',
+  },
+  {
+    label: 'ghproxy.net',
+    base: 'https://ghproxy.net/https://github.com/f891127/zhimail/releases/latest/download',
+  },
+];
+
+export interface FeedSpeed {
+  label: string;
+  url: string;
+  ok: boolean;
+  /** 实测下载速度 KB/s */
+  kbps?: number;
+  /** 本次测速实际收到的字节数 */
+  bytes?: number;
+  error?: string;
+}
+
+async function measureThroughput(url: string, wantBytes = 3 * 1024 * 1024, timeoutMs = 6000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const started = Date.now();
+  let received = 0;
+  try {
+    const res = await fetch(url, {
+      headers: { Range: `bytes=0-${wantBytes - 1}` },
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    if (!res.ok && res.status !== 206) throw new Error(`HTTP ${res.status}`);
+    const reader = res.body?.getReader();
+    if (!reader) {
+      received = (await res.arrayBuffer()).byteLength;
+    } else {
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          received += value?.length ?? 0;
+          if (received >= wantBytes) {
+            await reader.cancel().catch(() => undefined);
+            break;
+          }
+        }
+      } catch (error) {
+        // 慢速链路会在超时窗口内被中断：已经收到的字节仍可用于估算速度
+        if (!received) throw error;
+      }
+    }
+    const ms = Math.max(1, Date.now() - started);
+    return { bytes: received, kbps: Math.round(received / 1024 / (ms / 1000)) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 逐个源测速：先取 latest.yml 拿安装包文件名，再拉前 3MB 量带宽 */
+export async function speedTestFeeds(): Promise<FeedSpeed[]> {
+  const results = await Promise.all(
+    SPEED_BASES.map(async (item): Promise<FeedSpeed> => {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        let manifest: Response;
+        try {
+          manifest = await fetch(`${item.base}/latest.yml`, { redirect: 'follow', signal: controller.signal });
+        } finally {
+          clearTimeout(timer);
+        }
+        if (!manifest.ok) throw new Error(`清单 HTTP ${manifest.status}`);
+        const text = await manifest.text();
+        const file = /path:\s*(\S+)/.exec(text)?.[1];
+        if (!file) throw new Error('清单里没有安装包文件名');
+        const measured = await measureThroughput(`${item.base}/${encodeURIComponent(file)}`);
+        if (!measured.bytes) throw new Error('没有收到数据');
+        return { label: item.label, url: item.base, ok: true, kbps: measured.kbps, bytes: measured.bytes };
+      } catch (error) {
+        const raw = String((error as Error).message ?? error);
+        return {
+          label: item.label,
+          url: item.base,
+          ok: false,
+          error: raw.includes('aborted') ? '测速超时' : raw.slice(0, 120),
+        };
+      }
+    }),
+  );
+  return results.sort((a, b) => (b.kbps ?? 0) - (a.kbps ?? 0));
+}

@@ -6,7 +6,14 @@ import { SystemSettingsPage } from '@/features/settings/SystemSettingsPage';
 import { useAppStore } from '@/store/useAppStore';
 import { Icon, type IconName } from '@/components/Icon';
 import { api } from '@/lib/api';
-import type { AccountInput, AppSettings, BackupOverview, BriefKind, BriefSchedule } from '@/types/zhimail';
+import type {
+  AccountInput,
+  AppSettings,
+  BackupOverview,
+  BriefKind,
+  BriefSchedule,
+  FeedSpeed,
+} from '@/types/zhimail';
 import { fileSize } from '@/lib/format';
 import {
   DEFAULT_READER_ACTIONS,
@@ -214,6 +221,31 @@ export function SettingsDialog() {
 
   const [backupInfo, setBackupInfo] = useState<BackupOverview | null>(null);
   const [scheduleBusy, setScheduleBusy] = useState<string | null>(null);
+
+  // 更新源测速：一次性测完所有镜像，直接切到最快那个
+  const [speedTesting, setSpeedTesting] = useState(false);
+  const [speedRows, setSpeedRows] = useState<FeedSpeed[] | null>(null);
+  const runSpeedTest = async () => {
+    setSpeedTesting(true);
+    setSpeedRows(null);
+    try {
+      const rows = await api.update.speedTest();
+      setSpeedRows(rows);
+      const fastest = rows.find((row) => row.ok && (row.kbps ?? 0) > 0);
+      if (!fastest) {
+        store.pushToast({ type: 'error', title: '测速失败', message: '所有更新源都没测通，可换网络后重试' });
+        return;
+      }
+      await saveUpdateSource(
+        { source: 'custom', customUrl: fastest.url },
+        `已切换到最快的源：${fastest.label}（${fastest.kbps} KB/s）`,
+      );
+    } catch (error) {
+      store.pushToast({ type: 'error', title: '测速失败', message: (error as Error).message });
+    } finally {
+      setSpeedTesting(false);
+    }
+  };
 
   // 更新源本地状态：改动后点击「保存更新源」才写入设置
   const [customUrl, setCustomUrl] = useState(settings?.update?.customUrl ?? '');
@@ -1849,10 +1881,34 @@ export function SettingsDialog() {
                     >
                       {testingSource ? '测试中…' : '测试'}
                     </button>
+                    <button
+                      type="button"
+                      className="primary-btn"
+                      disabled={speedTesting}
+                      onClick={() => void runSpeedTest()}
+                    >
+                      {speedTesting ? '测速中…' : '测速并选最快'}
+                    </button>
                     <span className="text-[11px] text-shell-faint">
                       当前：{savedSource === 'custom' ? describeSource(savedUrl) : 'GitHub 官方'}
                     </span>
                   </div>
+                  {speedRows && (
+                    <div className="mt-2 rounded border border-shell-lineSoft bg-[#fafbfc] px-2.5 py-2 text-[11px] leading-5">
+                      <div className="mb-1 font-semibold text-shell-sub">各更新源实测速度（取前 3MB 估算）</div>
+                      {speedRows.map((row) => (
+                        <div key={row.url} className="flex items-center justify-between gap-2">
+                          <span className="truncate">
+                            {row.label}
+                            {row.url === savedUrl && <span className="ml-1 text-brand-600">（当前）</span>}
+                          </span>
+                          <span className={row.ok ? 'text-emerald-700' : 'text-rose-600'}>
+                            {row.ok ? `${row.kbps} KB/s` : row.error}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {sourceTest && (
                     <div
                       className={`mt-2 rounded border px-2.5 py-2 text-[11px] leading-5 ${
