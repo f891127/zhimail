@@ -33,11 +33,17 @@ win:
     - target: nsis
       arch:
         - x64
+    # 免安装便携版：解压即用，随安装包一并发布到 Release
+    - target: zip
+      arch:
+        - x64
   icon: build/icon.ico
-  artifactName: ZhiMail-Setup-${version}-x64.${ext}
+  # zip 等默认目标的命名；NSIS 安装包由下方 nsis.artifactName 单独覆盖
+  artifactName: ZhiMail-Portable-${version}-x64.${ext}
   executableName: ZhiMail
 
 nsis:
+  artifactName: ZhiMail-Setup-${version}-x64.${ext}
   oneClick: false
   perMachine: false
   allowElevation: true
