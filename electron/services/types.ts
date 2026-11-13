@@ -390,6 +390,10 @@ export interface AppBehaviorSettings {
 }
 
 export interface MailBehaviorSettings {
+  /** 定时收取邮件 */
+  autoReceive: boolean;
+  /** 收取间隔（分钟），最小 1 */
+  receiveIntervalMinutes: number;
   /** 新邮件提醒窗口（系统通知） */
   notify: boolean;
   /** 新邮件提醒声音 */

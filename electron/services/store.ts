@@ -91,6 +91,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     fontScale: 'standard',
   },
   mail: {
+    autoReceive: true,
+    receiveIntervalMinutes: 15,
     notify: true,
     notifySound: false,
     attachmentPreview: true,

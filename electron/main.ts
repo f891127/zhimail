@@ -7,7 +7,7 @@ import { initUpdater, isInstallingUpdate, onUpdateState } from './services/updat
 import { store } from './services/store';
 import { resolveDataDir } from './services/location';
 import { maybeAutoBackup } from './services/backup';
-import { registerIpcHandlers, setMainWindow, startScheduler } from './ipc';
+import { registerIpcHandlers, setMainWindow, startAutoReceive, startScheduler } from './ipc';
 import { seedDemoData } from './services/demo';
 import { imapService } from './services/imap';
 import { briefScheduler } from './services/scheduler';
@@ -390,6 +390,8 @@ if (!gotLock) {
     }
 
     registerIpcHandlers();
+    // 启动时按设置里的间隔开启定时收取（默认 15 分钟）
+    startAutoReceive();
     mainWindow = createWindow();
     setMainWindow(mainWindow);
     applyAppBehavior(mainWindow);

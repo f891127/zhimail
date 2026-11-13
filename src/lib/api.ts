@@ -47,6 +47,8 @@ const emptySettings: AppSettings = {
     fontScale: 'standard' as const,
   },
   mail: {
+    autoReceive: true,
+    receiveIntervalMinutes: 15,
     notify: true,
     notifySound: false,
     attachmentPreview: true,
@@ -82,6 +84,8 @@ function mockSystemState() {
     canSetDefaultMailClient: false,
     locale: 'system' as const,
     mail: {
+      autoReceive: true,
+      receiveIntervalMinutes: 15,
       notify: true,
       notifySound: false,
       attachmentPreview: true,

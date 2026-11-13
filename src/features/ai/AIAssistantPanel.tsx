@@ -313,7 +313,7 @@ export function AIAssistantPanel() {
             <div className="rounded border border-shell-lineSoft bg-shell-bg/60 px-2.5 py-2 text-[11px] leading-4 text-shell-sub">
               {selectedMessage ? (
                 <>
-                  仅分析当前邮件：
+                  当前邮件：
                   <b className="text-shell-text">{selectedMessage.subject || '(无主题)'}</b>
                   <div className="mt-0.5 text-[10px] text-shell-faint">
                     {selectedMessage.from?.[0]?.name || selectedMessage.from?.[0]?.address || '未知发件人'} ·{' '}
@@ -321,7 +321,7 @@ export function AIAssistantPanel() {
                   </div>
                 </>
               ) : (
-                '请先在列表中选中一封邮件，再点击「摘要当前邮件」。'
+                '请先在列表中选中一封邮件，再点击下方按钮生成摘要。'
               )}
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -334,25 +334,62 @@ export function AIAssistantPanel() {
                 <Icon name="sparkles" size={12} />
                 {aiBusy ? '正在生成…' : '摘要当前邮件'}
               </button>
-              {aiOutputs.message?.markdown && (
-                <button
-                  type="button"
-                  className="ghost-btn"
-                  onClick={() => void copyText(aiOutputs.message?.markdown ?? '')}
-                >
-                  <Icon name="document" size={12} />
-                  复制摘要
-                </button>
-              )}
+              <button
+                type="button"
+                className="ghost-btn"
+                disabled={!selectedMessage || aiBusy}
+                onClick={() => void store.runThreadSummary(selectedMessage?.threadId)}
+              >
+                <Icon name="document" size={12} />
+                会话摘要
+              </button>
             </div>
+
+            {aiOutputs.thread?.markdown && (
+              <div className="rounded border border-shell-lineSoft">
+                <div className="flex items-center gap-1 border-b border-shell-lineSoft bg-[#fafbfc] px-2 py-1 text-[10px] font-medium text-shell-sub">
+                  <Icon name="document" size={10} />
+                  会话摘要
+                  {aiOutputs.thread.count ? `（${aiOutputs.thread.count} 封）` : ''}
+                  <button
+                    type="button"
+                    className="ml-auto text-[10px] text-brand-600 hover:underline"
+                    onClick={() => void copyText(aiOutputs.thread?.markdown ?? '')}
+                  >
+                    复制
+                  </button>
+                </div>
+                <div
+                  className="compact-markdown px-2 py-1.5 text-[12px] leading-5 text-shell-text"
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(aiOutputs.thread.markdown) }}
+                />
+              </div>
+            )}
+
             {aiOutputs.message?.markdown ? (
-              <div className="markdown-body text-[12px] leading-5 text-shell-text">
-                <div dangerouslySetInnerHTML={{ __html: renderMarkdown(aiOutputs.message.markdown) }} />
+              <div className="rounded border border-shell-lineSoft">
+                <div className="flex items-center gap-1 border-b border-shell-lineSoft bg-[#fafbfc] px-2 py-1 text-[10px] font-medium text-shell-sub">
+                  <Icon name="sparkles" size={10} />
+                  当前邮件摘要
+                  <button
+                    type="button"
+                    className="ml-auto text-[10px] text-brand-600 hover:underline"
+                    onClick={() => void copyText(aiOutputs.message?.markdown ?? '')}
+                  >
+                    复制
+                  </button>
+                </div>
+                <div
+                  className="compact-markdown px-2 py-1.5 text-[12px] leading-5 text-shell-text"
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(aiOutputs.message.markdown) }}
+                />
               </div>
             ) : (
-              <div className="rounded border border-dashed border-shell-lineSoft px-2.5 py-3 text-center text-[11px] text-shell-faint">
-                还没有摘要。点击上方按钮，AI 会读这封邮件的正文，给出一句话结论、要点与需要跟进的事项。
-              </div>
+              !aiOutputs.thread?.markdown && (
+                <div className="rounded border border-dashed border-shell-lineSoft px-2.5 py-3 text-center text-[11px] text-shell-faint">
+                  还没有摘要。AI 会读这封邮件（或整个会话串）的正文，给出一句话结论、要点与需要跟进的事项。
+                </div>
+              )
             )}
           </div>
         )}

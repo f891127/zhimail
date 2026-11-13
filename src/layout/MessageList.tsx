@@ -186,7 +186,8 @@ function ThreadRow({
 export function MessageList() {
   const store = useAppStore();
   const listMode = store.settings?.mail?.listMode ?? 'conversation';
-  const threadMode = listMode === 'conversation';
+  // 搜索结果按普通列表平铺展示；清空搜索后恢复按设置的会话 / 相关邮件模式
+  const threadMode = listMode === 'conversation' && !store.searchActive;
   const {
     messages: rawMessages,
     threads,

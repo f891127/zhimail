@@ -181,6 +181,8 @@ export interface AppBehaviorSettings {
 }
 
 export interface MailBehaviorSettings {
+  autoReceive: boolean;
+  receiveIntervalMinutes: number;
   notify: boolean;
   notifySound: boolean;
   attachmentPreview: boolean;

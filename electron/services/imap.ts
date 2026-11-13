@@ -171,6 +171,46 @@ function detectFolderKind(path: string, specialUse: string | undefined): FolderK
   return 'custom';
 }
 
+
+/** 内置特殊文件夹的标准中文名 */
+const BUILTIN_FOLDER_NAMES: Record<string, string> = {
+  inbox: '收件箱',
+  draft: '草稿箱',
+  sent: '已发送',
+  archive: '存档',
+  junk: '垃圾邮件',
+  trash: '已删除',
+};
+
+/** 服务器上常见的英文文件夹名 → 中文显示名（腾讯企业邮等会返回 INBOX / unwanted 这类名字） */
+const FOLDER_NAME_ZH: Record<string, string> = {
+  inbox: '收件箱',
+  drafts: '草稿箱',
+  draft: '草稿箱',
+  'sent messages': '已发送',
+  sent: '已发送',
+  'sent items': '已发送',
+  'deleted messages': '已删除',
+  deleted: '已删除',
+  trash: '已删除',
+  junk: '垃圾邮件',
+  'junk e-mail': '垃圾邮件',
+  spam: '垃圾邮件',
+  unwanted: '可疑邮件',
+  archive: '存档',
+  archives: '存档',
+  'all mail': '全部邮件',
+  outbox: '发件箱',
+  notes: '便签',
+};
+
+function localizeFolderName(name: string, kind: string): string {
+  const builtin = BUILTIN_FOLDER_NAMES[kind];
+  if (builtin) return builtin;
+  const key = name.trim().toLowerCase();
+  return FOLDER_NAME_ZH[key] ?? name;
+}
+
 const KIND_ORDER: Record<FolderKind, number> = {
   virtual: -1,
   inbox: 0,
@@ -238,11 +278,16 @@ export class ImapService {
       const existing = store.listFolders(account.id);
       // 服务器上的收件箱/已发送/草稿等特殊文件夹要与内置文件夹合并，
       // 否则会出现「收件箱」和「INBOX」两个入口、邮件全堆在 INBOX 的情况
+      // 按 kind 匹配内置文件夹（不要求没有 remotePath，否则第二次同步会再建一个 INBOX 出来）
       const builtinByKind = new Map<string, Folder>();
       for (const folder of existing) {
-        if (folder.remotePath) continue;
         if (folder.kind === 'custom' || folder.kind === 'brief' || folder.kind === 'virtual') continue;
-        if (!builtinByKind.has(folder.kind)) builtinByKind.set(folder.kind, folder);
+        const canonicalId = `${account.id}:${folder.kind}`;
+        const current = builtinByKind.get(folder.kind);
+        // 优先保留 id 规范（acc:inbox 这种）的那条，其余重复项交给后面的清理逻辑
+        if (!current || (folder.id === canonicalId && current.id !== canonicalId)) {
+          builtinByKind.set(folder.kind, folder);
+        }
       }
       const folders: Folder[] = [];
       const usedBuiltin = new Set<string>();
@@ -254,6 +299,8 @@ export class ImapService {
           usedBuiltin.add(builtin.id);
           folders.push({
             ...builtin,
+            // 特殊文件夹统一用内置中文名，避免出现 INBOX / Drafts / Sent Messages
+            name: BUILTIN_FOLDER_NAMES[kind] ?? builtin.name,
             remotePath: item.path,
             specialUse: item.specialUse,
             deletable: false,
@@ -264,7 +311,7 @@ export class ImapService {
         folders.push({
           id: `${account.id}:${item.path}`,
           accountId: account.id,
-          name: item.name || item.path,
+          name: localizeFolderName(item.name || item.path, kind),
           kind,
           remotePath: item.path,
           specialUse: item.specialUse,

@@ -135,6 +135,8 @@ export function FolderTree() {
     todoStats,
     setView,
     openSettings,
+    removeAccount,
+    pushToast,
     info,
   } = store;
 
@@ -143,6 +145,11 @@ export function FolderTree() {
   const [creatingIn, setCreatingIn] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [menu, setMenu] = useState<{ x: number; y: number; folder: Folder } | null>(null);
+  /** 账户行右键菜单 */
+  const [accountMenu, setAccountMenu] = useState<{ x: number; y: number; accountId: string; name: string; demo: boolean } | null>(null);
+  /** 删除账户确认 */
+  const [removing, setRemoving] = useState<{ accountId: string; name: string } | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
 
   const submitCreate = async () => {
     const name = newName.trim();
@@ -247,7 +254,19 @@ export function FolderTree() {
           const totalUnread = accountFolders.reduce((sum, folder) => sum + folder.unread, 0);
           return (
             <div key={account.id} className="mb-1">
-              <div className="group flex h-[28px] items-center gap-1.5 px-1.5">
+              <div
+                className="group flex h-[28px] items-center gap-1.5 px-1.5"
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  setAccountMenu({
+                    x: event.clientX,
+                    y: event.clientY,
+                    accountId: account.id,
+                    name: account.name,
+                    demo: Boolean(account.demo),
+                  });
+                }}
+              >
                 <button
                   type="button"
                   className="flex h-4 w-4 items-center justify-center text-shell-faint hover:text-shell-text"
@@ -406,6 +425,66 @@ export function FolderTree() {
           items={folderMenuItems(menu.folder)}
           onClose={() => setMenu(null)}
         />
+      )}
+
+      {accountMenu && (
+        <ContextMenu
+          x={accountMenu.x}
+          y={accountMenu.y}
+          items={[
+            {
+              label: accountMenu.demo ? '演示邮箱（无需同步）' : '立即收取此账户',
+              disabled: accountMenu.demo,
+              onClick: () => void syncNow(accountMenu.accountId),
+            },
+            { label: '在此账户下新建文件夹…', onClick: () => { setCreatingIn(accountMenu.accountId); setNewName(''); } },
+            { divider: true },
+            { label: '账户设置…', onClick: () => openSettings('account') },
+            { divider: true },
+            {
+              label: '删除账户',
+              danger: true,
+              onClick: () => setRemoving({ accountId: accountMenu.accountId, name: accountMenu.name }),
+            },
+          ]}
+          onClose={() => setAccountMenu(null)}
+        />
+      )}
+
+      {removing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25" onClick={() => (removeBusy ? null : setRemoving(null))}>
+          <div className="w-[360px] rounded-lg border border-shell-line bg-white p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium text-shell-text">
+              <Icon name="alert" size={15} className="text-rose-500" />
+              删除账户「{removing.name}」
+            </div>
+            <p className="text-[11px] leading-5 text-shell-sub">
+              将删除该账户及其本地已下载的邮件、文件夹与简报，服务器上的邮件不受影响。此操作不可撤销。
+            </p>
+            <div className="mt-3 flex justify-end gap-2">
+              <button type="button" className="ghost-btn" disabled={removeBusy} onClick={() => setRemoving(null)}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded bg-rose-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-600 disabled:opacity-50"
+                disabled={removeBusy}
+                onClick={async () => {
+                  setRemoveBusy(true);
+                  try {
+                    await removeAccount(removing.accountId);
+                    pushToast({ type: 'info', title: '账户已删除', message: `「${removing.name}」已从本机移除` });
+                    setRemoving(null);
+                  } finally {
+                    setRemoveBusy(false);
+                  }
+                }}
+              >
+                {removeBusy ? '删除中…' : '确认删除'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -103,6 +103,32 @@ export function SystemSettingsPage() {
       <section>
         <div className="mb-1.5 text-[11px] font-semibold text-shell-sub">邮件</div>
         <div className="space-y-[2px] rounded border border-shell-lineSoft bg-[#fafbfc] px-2.5 py-2">
+          <div className="flex flex-wrap items-center gap-2 px-1 py-1">
+            <label className="flex cursor-pointer items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={mail?.autoReceive ?? true}
+                onChange={(e) => patchMail({ autoReceive: e.target.checked })}
+                className="h-3.5 w-3.5 accent-brand-500"
+              />
+              <span className="text-[11px] text-shell-text">定时收取邮件</span>
+            </label>
+            <span className="text-[11px] text-shell-sub">每隔</span>
+            <input
+              type="number"
+              min={1}
+              max={240}
+              value={mail?.receiveIntervalMinutes ?? 15}
+              disabled={!(mail?.autoReceive ?? true)}
+              onChange={(e) => {
+                const value = Math.max(1, Math.min(240, Number(e.target.value) || 15));
+                patchMail({ receiveIntervalMinutes: value });
+              }}
+              className="w-16 rounded border border-shell-line bg-white px-1.5 py-[3px] text-[11px] text-shell-text outline-none focus:border-brand-400 disabled:opacity-50"
+            />
+            <span className="text-[11px] text-shell-sub">分钟</span>
+            <span className="text-[10px] text-shell-faint">（1–240，修改后立即生效；点「同步」可手动立即收取）</span>
+          </div>
           <Checkbox
             checked={mail?.notify ?? true}
             label="新邮件提醒窗口"

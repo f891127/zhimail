@@ -596,7 +596,9 @@ export const useAppStore = create<State>((set, get) => ({
   },
 
   clearSearch: async () => {
-    set({ searchActive: false, searchKeyword: '', searchExplain: null });
+    // 搜索时临时关掉了会话模式，清空搜索后要按设置恢复，否则列表按会话渲染却拿到空数组
+    const threadMode = (get().settings?.mail?.listMode ?? 'conversation') === 'conversation';
+    set({ searchActive: false, searchKeyword: '', searchExplain: null, threadMode });
     await get().loadMessages();
   },
 
@@ -753,7 +755,8 @@ export const useAppStore = create<State>((set, get) => ({
       get().pushToast({ type: 'info', title: '这封邮件暂无会话串', message: '会话串依据 References 与主题归并' });
       return;
     }
-    set({ aiBusy: true, aiProgress: '正在整理会话串…', aiPanelOpen: true, aiTab: 'analysis' });
+    // 会话摘要同样放在「邮件摘要」页签，点开即自动生成
+    set({ aiBusy: true, aiProgress: '正在整理会话串…', aiPanelOpen: true, aiTab: 'summary' });
     try {
       const result = await api.ai.summarizeThread(id);
       if (result.ok && result.markdown) {

@@ -157,13 +157,7 @@ export function MenuBar() {
       ref={containerRef}
       className="relative z-30 flex h-8 shrink-0 items-center gap-1 border-b border-shell-line bg-shell-chrome px-2 text-xs text-shell-sub"
     >
-      <div className="mr-2 flex items-center gap-1.5 pl-1">
-        <div className="flex h-[18px] w-[18px] items-center justify-center rounded-[4px] bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-sm">
-          <Icon name="mail" size={11} strokeWidth={2} />
-        </div>
-        <span className="text-[12px] font-semibold tracking-wide text-shell-text">知邮</span>
-        <span className="text-[10px] font-medium text-brand-500">ZhiMail</span>
-      </div>
+      <div className="mr-1 h-4 w-[1px] bg-shell-line" />
 
       {Object.entries(menus).map(([title, items]) => (
         <div key={title} className="relative">

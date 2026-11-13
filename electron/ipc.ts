@@ -194,6 +194,70 @@ async function loadMessage(id: string): Promise<MessageFull | undefined> {
   return { ...meta, body: body ?? { attachments: [] } };
 }
 
+
+/** 立即同步单个账户（工具栏、定时收取、IDLE 兜底共用同一实现） */
+export async function syncAccountNow(accountId: string) {
+  const account = store.getAccount(accountId);
+  if (!account) return { ok: false, error: '账户不存在' };
+  if (account.demo) {
+    return { ok: false, error: '演示邮箱为本地示例数据，无需同步。可在「设置 → 账户」中添加真实邮箱。' };
+  }
+  const settings = store.getSettings().sync;
+  try {
+    const result = await imapService.syncAccount(
+      account,
+      { days: account.syncDays || settings.days, limit: settings.limit },
+      (progress: SyncProgress) => emit('sync:progress', progress),
+    );
+    emit('mail:changed', {});
+    return { ok: true, ...result };
+  } catch (error) {
+    emit('sync:progress', {
+      accountId,
+      phase: 'error',
+      current: 0,
+      total: 0,
+      message: (error as Error).message,
+    } satisfies SyncProgress);
+    return { ok: false, error: (error as Error).message };
+  }
+}
+
+let autoReceiveTimer: NodeJS.Timeout | null = null;
+let autoReceiveBusy = false;
+
+/** 按「设置 → 系统设置 → 邮件」里的间隔重启定时收取 */
+export function startAutoReceive(): void {
+  if (autoReceiveTimer) {
+    clearInterval(autoReceiveTimer);
+    autoReceiveTimer = null;
+  }
+  const { autoReceive, receiveIntervalMinutes } = store.getSettings().mail;
+  if (!autoReceive) return;
+  const minutes = Math.max(1, Math.min(240, Number(receiveIntervalMinutes) || 15));
+  autoReceiveTimer = setInterval(() => {
+    void autoReceiveTick();
+  }, minutes * 60_000);
+  if (typeof autoReceiveTimer.unref === 'function') autoReceiveTimer.unref();
+}
+
+async function autoReceiveTick(): Promise<void> {
+  if (autoReceiveBusy) return;
+  autoReceiveBusy = true;
+  try {
+    for (const account of store.listAccounts()) {
+      if (account.demo) continue;
+      try {
+        await syncAccountNow(account.id);
+      } catch {
+        /* 单个账户失败不影响其他账户 */
+      }
+    }
+  } finally {
+    autoReceiveBusy = false;
+  }
+}
+
 export function registerIpcHandlers(): void {
   /* ------------------------------ 应用信息 ------------------------------ */
 
@@ -427,32 +491,7 @@ export function registerIpcHandlers(): void {
 
   /* ------------------------------ 同步 ------------------------------ */
 
-  ipcMain.handle('sync/start', async (_event, accountId: string) => {
-    const account = store.getAccount(accountId);
-    if (!account) return { ok: false, error: '账户不存在' };
-    if (account.demo) {
-      return { ok: false, error: '演示邮箱为本地示例数据，无需同步。可在「设置 → 账户」中添加真实邮箱。' };
-    }
-    const settings = store.getSettings().sync;
-    try {
-      const result = await imapService.syncAccount(
-        account,
-        { days: account.syncDays || settings.days, limit: settings.limit },
-        (progress: SyncProgress) => emit('sync:progress', progress),
-      );
-      emit('mail:changed', {});
-      return { ok: true, ...result };
-    } catch (error) {
-      emit('sync:progress', {
-        accountId,
-        phase: 'error',
-        current: 0,
-        total: 0,
-        message: (error as Error).message,
-      } satisfies SyncProgress);
-      return { ok: false, error: (error as Error).message };
-    }
-  });
+  ipcMain.handle('sync/start', (_event, accountId: string) => syncAccountNow(accountId));
 
   ipcMain.handle('sync/cancel', (_event, accountId: string) => {
     imapService.cancel(accountId);
@@ -634,6 +673,7 @@ export function registerIpcHandlers(): void {
     const updated = store.updateSettings(rest);
     if (rest.update) applyUpdateFeed();
     if (rest.ai) resetBalanceCache();
+    if (rest.mail) startAutoReceive();
     if (rest.brief) {
       // 排程或总开关变化后按最新设置重启调度
       if (rest.brief.autoEnabled ?? updated.brief.autoEnabled) startScheduler();

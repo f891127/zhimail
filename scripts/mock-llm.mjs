@@ -127,6 +127,19 @@ function pickReply(userText) {
 }
 
 const server = http.createServer((req, res) => {
+  // 余额查询（DeepSeek 格式），用于联调「测试余额查询」
+  if ((req.url ?? '').includes('user/balance')) {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        is_available: true,
+        balance_infos: [
+          { currency: 'CNY', total_balance: '128.66', granted_balance: '8.66', topped_up_balance: '120.00' },
+        ],
+      }),
+    );
+    return;
+  }
   if (req.method !== 'POST') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ models: [{ id: 'mock-model' }] }));
