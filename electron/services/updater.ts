@@ -156,12 +156,18 @@ export function initUpdater(): void {
   );
   autoUpdater.on('error', (error) => {
     const raw = String(error?.message ?? error);
-    const networkIssue = /ERR_CONNECTION|ETIMEDOUT|ENOTFOUND|ECONNRESET|timeout|socket hang up/i.test(raw);
+    const kind = classifyUpdateError(raw);
+    if (kind === 'not-found') {
+      // 上游没有比当前版本更新的发布（或清单缺失），按「已是最新版本」提示，不再报连接错误
+      setState({ phase: 'not-available', error: undefined });
+      return;
+    }
     setState({
       phase: 'error',
-      error: networkIssue
-        ? `无法连接更新服务器（${raw.slice(0, 120)}）。常见原因是网络无法直连 GitHub，可在下方把更新源切换为镜像地址后重试。`
-        : raw.slice(0, 400),
+      error:
+        kind === 'network'
+          ? `无法连接更新服务器（${raw.slice(0, 120)}）。常见原因是网络无法直连 GitHub，可在下方把更新源切换为镜像地址后重试。`
+          : raw.slice(0, 400),
     });
   });
 
@@ -171,6 +177,19 @@ export function initUpdater(): void {
       void checkForUpdates().catch(() => undefined);
     }, 8000);
   }
+}
+
+
+/** 把 electron-updater 的报错分类：网络不通 / 没有可用的更新包 / 其他 */
+function classifyUpdateError(raw: string): 'network' | 'not-found' | 'other' {
+  if (/ERR_CONNECTION|ETIMEDOUT|ENOTFOUND|ECONNRESET|EAI_AGAIN|timeout|socket hang up|net::ERR_INTERNET/i.test(raw)) {
+    return 'network';
+  }
+  // 没有新版本、渠道不存在、latest.yml 404 等情况都表示「当前已是最新」
+  if (/404|not found|cannot find|no published versions|ERR_HTTP_RESPONSE_CODE_FAILURE|latest\.yml/i.test(raw)) {
+    return 'not-found';
+  }
+  return 'other';
 }
 
 export async function checkForUpdates(): Promise<UpdateState> {
@@ -187,12 +206,17 @@ export async function checkForUpdates(): Promise<UpdateState> {
     await autoUpdater.checkForUpdates();
   } catch (error) {
     const raw = String((error as Error).message);
-    const networkIssue = /ERR_CONNECTION|ETIMEDOUT|ENOTFOUND|ECONNRESET|timeout|socket hang up/i.test(raw);
+    const kind = classifyUpdateError(raw);
+    if (kind === 'not-found') {
+      setState({ phase: 'not-available', error: undefined });
+      return state;
+    }
     setState({
       phase: 'error',
-      error: networkIssue
-        ? `无法连接更新服务器（${raw.slice(0, 120)}）。常见原因是网络无法直连 GitHub，可在下方把更新源切换为镜像地址后重试。`
-        : raw.slice(0, 400),
+      error:
+        kind === 'network'
+          ? `无法连接更新服务器（${raw.slice(0, 120)}）。常见原因是网络无法直连 GitHub，可在下方把更新源切换为镜像地址后重试。`
+          : raw.slice(0, 400),
     });
   }
   return state;

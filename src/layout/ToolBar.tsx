@@ -90,25 +90,27 @@ export function ToolBar() {
           title="回复 (Ctrl+R)"
         >
           <Icon name="reply" size={15} />
-          <span className="hidden xl:inline">{tt('回复')}</span>
+          <span>{tt('回复')}</span>
         </button>
         <button
           type="button"
           className="tool-btn"
           disabled={!selectedMessageId}
           onClick={() => replyToMessage('replyAll')}
-          title="全部回复"
+          title="全部回复 (Ctrl+Shift+R)"
         >
           <Icon name="reply-all" size={15} />
+          <span>全部</span>
         </button>
         <button
           type="button"
           className="tool-btn"
           disabled={!selectedMessageId}
           onClick={() => replyToMessage('forward')}
-          title="转发"
+          title="转发 (Ctrl+F)"
         >
           <Icon name="forward" size={15} />
+          <span>转发</span>
         </button>
         <div className="mx-0.5 h-5 w-px bg-shell-lineSoft" />
         <button
@@ -116,9 +118,10 @@ export function ToolBar() {
           className={`tool-btn ${flagged ? 'text-accent-500' : ''}`}
           disabled={!selectedMessageId}
           onClick={() => selectedMessageId && void toggleFlag([selectedMessageId], '\\Flagged', !flagged)}
-          title="星标"
+          title="加星标 / 取消星标"
         >
           <Icon name={flagged ? 'star-filled' : 'star'} size={15} />
+          <span>{flagged ? '已星标' : '星标'}</span>
         </button>
         <button
           type="button"
@@ -128,6 +131,7 @@ export function ToolBar() {
           title="删除 (Delete)"
         >
           <Icon name="trash" size={15} />
+          <span>删除</span>
         </button>
         <button
           type="button"
@@ -136,7 +140,7 @@ export function ToolBar() {
           title={realAccount ? '同步邮箱' : '演示邮箱无需同步'}
         >
           <Icon name="refresh" size={15} />
-          <span className="hidden xl:inline">{tt('同步')}</span>
+          <span>{tt('同步')}</span>
         </button>
       </div>
 
@@ -151,7 +155,7 @@ export function ToolBar() {
           title="邮件简报"
         >
           <Icon name="document" size={15} />
-          <span className="hidden xl:inline">{tt('简报')}</span>
+          <span>{tt('简报')}</span>
         </button>
         <button
           type="button"
@@ -160,6 +164,7 @@ export function ToolBar() {
           title="待办事项"
         >
           <Icon name="checklist" size={15} />
+          <span>待办</span>
         </button>
         <button
           type="button"
@@ -168,10 +173,11 @@ export function ToolBar() {
           title="AI 助手 (Ctrl+Shift+A)"
         >
           <Icon name="sparkles" size={15} className={aiBusy ? 'animate-pulse-soft text-brand-500' : 'text-brand-500'} />
-          <span className="hidden xl:inline">{tt('AI 助手')}</span>
+          <span>{tt('AI 助手')}</span>
         </button>
         <button type="button" className="tool-btn" onClick={() => openSettings('ai')} title="设置">
           <Icon name="settings" size={15} />
+          <span>设置</span>
         </button>
       </div>
     </div>
