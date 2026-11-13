@@ -256,7 +256,7 @@ export function FolderTree() {
           return (
             <div key={account.id} className="mb-1">
               <div
-                className="group flex h-[28px] items-center gap-1.5 px-1.5"
+                className="group mt-1 flex h-[30px] items-center gap-1.5 rounded-[3px] bg-black/[0.03] px-1.5"
                 onDoubleClick={(event) => {
                   // 双击账户名展开 / 收起该账户的文件夹（参考 Foxmail）
                   event.preventDefault();
@@ -310,7 +310,7 @@ export function FolderTree() {
               </div>
 
               {creatingIn === account.id && (
-                <div className="flex items-center gap-1 py-1 pl-7 pr-2">
+                <div className="flex items-center gap-1 py-1 pl-14 pr-2">
                   <input
                     autoFocus
                     value={newName}
@@ -342,20 +342,23 @@ export function FolderTree() {
                 </div>
               )}
 
-              {expanded &&
-                accountFolders.map((folder) => (
-                  <FolderRow
-                    key={folder.id}
-                    folder={folder}
-                    active={selectedFolderId === folder.id && view === 'mail'}
-                    indent={1}
-                    onClick={() => void selectFolder(folder.id)}
-                    onContext={(event, target) => {
-                      event.preventDefault();
-                      setMenu({ x: event.clientX, y: event.clientY, folder: target });
-                    }}
-                  />
-                ))}
+              {expanded && accountFolders.length > 0 && (
+                <div className="mt-0.5 ml-[24px] border-l border-brand-200 pl-1">
+                  {accountFolders.map((folder) => (
+                    <FolderRow
+                      key={folder.id}
+                      folder={folder}
+                      active={selectedFolderId === folder.id && view === 'mail'}
+                      indent={1}
+                      onClick={() => void selectFolder(folder.id)}
+                      onContext={(event, target) => {
+                        event.preventDefault();
+                        setMenu({ x: event.clientX, y: event.clientY, folder: target });
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
