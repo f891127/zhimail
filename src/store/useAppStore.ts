@@ -1192,7 +1192,9 @@ export const useAppStore = create<State>((set, get) => ({
     const phase = get().updateState?.phase;
     // 正在下载/已下载/安装中：只把进度窗口打开，不再发起新的检查（否则点了没反应）
     if (phase === 'downloading' || phase === 'downloaded' || phase === 'installing') {
-      get().openUpdateDialog();
+      const { settingsOpen, settingsTab } = get();
+      // 设置里已经停在「在线更新」页时不弹窗，进度在那一页看
+      if (!(settingsOpen && settingsTab === 'update')) get().openUpdateDialog();
       return;
     }
     const state = await api.update.check();

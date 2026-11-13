@@ -11,7 +11,19 @@ function formatSpeed(bytes?: number): string {
 
 export function UpdateDialog() {
   const store = useAppStore();
-  const { updateDialogOpen, closeUpdateDialog, updateState, downloadUpdate, installUpdate, checkUpdate } = store;
+  const {
+    updateDialogOpen,
+    closeUpdateDialog,
+    updateState,
+    downloadUpdate,
+    installUpdate,
+    checkUpdate,
+    settingsOpen,
+    settingsTab,
+  } = store;
+  // 设置窗口已经停在「在线更新」页时，那里本身就有进度条，
+  // 再叠一个更新弹窗会出现两个下载窗口，进度也只留一处展示
+  const suppressed = settingsOpen && settingsTab === 'update';
   const [notesOpen, setNotesOpen] = useState(false);
 
   // 打开时若还没有状态，主动查一次
@@ -19,7 +31,12 @@ export function UpdateDialog() {
     if (updateDialogOpen && !updateState) void checkUpdate();
   }, [updateDialogOpen, updateState, checkUpdate]);
 
-  if (!updateDialogOpen) return null;
+  // 被设置页接管时顺手关掉弹窗状态，避免用户关掉设置后弹窗又冒出来
+  useEffect(() => {
+    if (updateDialogOpen && suppressed) closeUpdateDialog();
+  }, [updateDialogOpen, suppressed, closeUpdateDialog]);
+
+  if (!updateDialogOpen || suppressed) return null;
   // 开始安装后自动让位给安装进度遮罩，避免挡住进度
   if (updateState?.phase === 'installing') return null;
 

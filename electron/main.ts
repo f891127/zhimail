@@ -316,6 +316,23 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
       waitMs: 4200,
     },
     {
+      name: '06c-update-single',
+      script: `(async () => {
+        for (let index = 0; index < 40 && !window.__zhimailDev; index += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        // 初始化会重置界面状态，重复几次确保设置窗真的打开
+        for (let index = 0; index < 6; index += 1) {
+          window.__zhimailDev?.showSettings?.('update');
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+        // 再尝试弹更新窗，验证不会出现两个下载窗口
+        window.__zhimailDev?.showUpdateDialog?.();
+        return true;
+      })()`,
+      waitMs: 2600,
+    },
+    {
       name: '19-about',
       script: `(async () => {
         for (let index = 0; index < 30 && !window.__zhimailDev; index += 1) {
