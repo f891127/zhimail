@@ -99,18 +99,20 @@ function FolderRow({
         className={active ? 'text-white' : color}
         strokeWidth={active ? 1.9 : 1.6}
       />
-      <span className={`flex-1 truncate ${active ? 'font-medium' : ''}`}>{folder.name}</span>
+      <span className={`flex-1 truncate text-[12.5px] ${active ? 'font-semibold' : 'font-normal'}`}>
+        {displayName}
+      </span>
       {folder.unread > 0 && (
         <span
-          className={`badge ${
-            active ? 'bg-white/25 text-white' : 'bg-brand-500 text-white'
+          className={`shrink-0 text-[11px] font-medium tabular-nums ${
+            active ? 'text-white/85' : 'text-accent-600'
           }`}
         >
-          {folder.unread > 99 ? '99+' : folder.unread}
+          ({folder.unread > 99 ? '99+' : folder.unread})
         </span>
       )}
       {folder.unread === 0 && folder.total > 0 && (
-        <span className={`text-[10px] tabular-nums ${active ? 'text-white/70' : 'text-shell-faint'}`}>
+        <span className={`shrink-0 text-[10.5px] tabular-nums ${active ? 'text-white/60' : 'text-shell-faint'}`}>
           {folder.total}
         </span>
       )}
@@ -207,7 +209,9 @@ export function FolderTree() {
                 <Icon name={commonExpanded ? 'chevron-down' : 'chevron-right'} size={12} />
               </span>
               <Icon name="folder-open" size={14} className="text-amber-500" />
-              <span className="flex-1 truncate text-xs font-medium text-shell-text">{tt('常用文件夹')}</span>
+              <span className="flex-1 truncate text-[11px] font-semibold tracking-[0.06em] text-shell-sub">
+                {tt('常用文件夹')}
+              </span>
             </button>
 
             {commonExpanded &&
@@ -284,10 +288,14 @@ export function FolderTree() {
                 <span className="flex h-[18px] w-[18px] items-center justify-center rounded-[4px] bg-gradient-to-br from-brand-400 to-brand-600 text-[9px] font-bold text-white">
                   {account.displayName.slice(0, 1) || '邮'}
                 </span>
-                <span className="flex-1 truncate text-xs font-medium text-shell-text" title={account.email}>
+                <span className="flex-1 truncate text-[13px] font-semibold tracking-[0.01em] text-shell-text" title={account.email}>
                   {account.name}
                 </span>
-                {totalUnread > 0 && <span className="badge bg-accent-500 text-white">{totalUnread}</span>}
+                {totalUnread > 0 && (
+                  <span className="shrink-0 rounded-full bg-accent-500 px-1.5 text-[10px] font-semibold leading-[15px] text-white tabular-nums">
+                    {totalUnread > 99 ? '99+' : totalUnread}
+                  </span>
+                )}
                 <button
                   type="button"
                   className="hidden text-shell-faint hover:text-brand-600 group-hover:block"
@@ -343,7 +351,11 @@ export function FolderTree() {
               )}
 
               {expanded && accountFolders.length > 0 && (
-                <div className="mt-0.5 ml-[24px] border-l border-brand-200 pl-1">
+                <div className="relative ml-[25px] mt-0.5 pl-1.5">
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute bottom-1.5 left-0 top-1.5 w-px rounded-full bg-gradient-to-b from-black/[0.03] via-black/[0.13] to-transparent"
+                  />
                   {accountFolders.map((folder) => (
                     <FolderRow
                       key={folder.id}
@@ -387,7 +399,7 @@ export function FolderTree() {
                 className={view === 'briefs' && selectedFolderId === 'briefs' ? 'text-white/70' : 'text-shell-faint'}
               />
               <Icon name="document" size={14} className="text-brand-600" />
-              <span className="flex-1 font-medium">{tt('邮件简报')}</span>
+              <span className="flex-1 text-[12.5px] font-semibold">{tt('邮件简报')}</span>
               <span
                 className={`text-[10px] tabular-nums ${
                   view === 'briefs' && selectedFolderId === 'briefs' ? 'text-white/70' : 'text-shell-faint'
@@ -417,10 +429,14 @@ export function FolderTree() {
             }`}
           >
             <Icon name="checklist" size={14} className={view === 'todos' ? 'text-white' : 'text-emerald-600'} />
-            <span className="flex-1 font-medium">{tt('待办事项')}</span>
+            <span className="flex-1 text-[12.5px] font-semibold">{tt('待办事项')}</span>
             {todoStats.pending > 0 && (
-              <span className={`badge ${view === 'todos' ? 'bg-white/25 text-white' : 'bg-accent-500 text-white'}`}>
-                {todoStats.pending}
+              <span
+                className={`shrink-0 text-[11px] font-medium tabular-nums ${
+                  view === 'todos' ? 'text-white/85' : 'text-accent-600'
+                }`}
+              >
+                ({todoStats.pending})
               </span>
             )}
           </button>

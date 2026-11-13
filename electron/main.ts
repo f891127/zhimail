@@ -470,6 +470,13 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
   for (const view of views) {
     if (onlyViews.length > 0 && !onlyViews.includes(view.name)) continue;
     try {
+      // 版本变化时更新日志会自动弹出，除专门展示它的视图外先关掉
+      if (view.name !== '09-changelog') {
+        await window.webContents.executeJavaScript(
+          "document.querySelector('[data-changelog-close]')?.click?.(); true",
+        );
+        await new Promise((resolve) => setTimeout(resolve, 120));
+      }
       await window.webContents.executeJavaScript(view.script);
     } catch (error) {
       console.warn('[screenshot] 视图切换失败', view.name, (error as Error).message);

@@ -100,6 +100,7 @@ export function ChangelogDialog() {
           <span className="text-[11px] text-shell-faint">当前版本 v{currentVersion}</span>
           <button
             type="button"
+            data-changelog-close
             onClick={closeChangelog}
             className="ml-auto rounded p-1 text-shell-faint transition-colors duration-120 hover:bg-black/[0.05] hover:text-shell-text"
             title="关闭"
