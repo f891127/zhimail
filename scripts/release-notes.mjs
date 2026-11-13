@@ -1,16 +1,23 @@
 #!/usr/bin/env node
 /**
- * 从 CHANGELOG.md 提取指定版本的说明，供 GitHub Release 使用。
- * 用法：node scripts/release-notes.mjs v1.1.0 > release-notes.md
+ * 从 CHANGELOG.md 提取指定版本的说明，供 GitHub Release 与更新清单（latest.yml）使用。
+ * 用法：
+ *   node scripts/release-notes.mjs            # 版本号取自 package.json
+ *   node scripts/release-notes.mjs v1.1.2     # 显式指定版本号（发版工作流使用）
  */
 import fs from 'node:fs';
 import path from 'node:path';
 
-const version = (process.argv[2] ?? '').replace(/^v/, '').trim();
+const packageFile = path.join(process.cwd(), 'package.json');
+const packageVersion = fs.existsSync(packageFile)
+  ? JSON.parse(fs.readFileSync(packageFile, 'utf8')).version
+  : '';
+
+const version = (process.argv[2] ?? packageVersion ?? '').replace(/^v/, '').trim();
 const file = path.join(process.cwd(), 'CHANGELOG.md');
 
 if (!version) {
-  console.error('用法：node scripts/release-notes.mjs <版本号>');
+  console.error('用法：node scripts/release-notes.mjs [版本号]');
   process.exit(1);
 }
 

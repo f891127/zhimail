@@ -1,7 +1,7 @@
 {
   "name": "zhimail",
   "productName": "ZhiMail",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "description": "知邮 ZhiMail —— Foxmail 风格桌面邮件客户端，内置 AI 汇总、邮件简报与待办提取能力",
   "author": {
@@ -26,7 +26,7 @@
     "screenshot": "ZHIMAIL_SCREENSHOT=1 electron .",
     "dist:win": "pnpm build && electron-builder --win nsis --x64",
     "dist:zip": "pnpm build && electron-builder --win zip --x64",
-    "notes": "node scripts/release-notes.mjs $(node -p \"require('./package.json').version\") > release-notes.md"
+    "notes": "node scripts/release-notes.mjs > release-notes.md"
   },
   "dependencies": {
     "docx": "^9.15.3",
