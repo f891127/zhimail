@@ -252,17 +252,16 @@ export function ReadingPane() {
               {!action.iconOnly && action.label}
             </button>
           ))}
-          {overflowActions.length > 0 && (
-            <button
-              type="button"
-              className="tool-btn"
-              title="更多操作"
-              onClick={(event) => setMoreMenu({ x: event.clientX, y: event.clientY })}
-            >
-              <Icon name="more" size={13} />
-              更多
-            </button>
-          )}
+          {/* 「更多」常驻：即使操作条没超出上限，也能从这里导出原文、重新解码等 */}
+          <button
+            type="button"
+            className="tool-btn"
+            title="更多操作（导出原文、重新解码等）"
+            onClick={(event) => setMoreMenu({ x: event.clientX, y: event.clientY })}
+          >
+            <Icon name="more" size={13} />
+            更多
+          </button>
         </div>
       </div>
 

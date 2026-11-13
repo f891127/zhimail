@@ -64,6 +64,13 @@ export function MenuBar() {
       { label: tt('新建邮箱账户…'), onClick: () => openSettings('account') },
       { divider: true, label: tt('') },
       { label: tt('立即同步'), shortcut: 'F5', onClick: () => void syncNow() },
+      {
+        label: tt('导出邮件原文（.eml）'),
+        disabled: !selectedMessageId,
+        onClick: () => {
+          if (selectedMessageId) void store.exportSource(selectedMessageId);
+        },
+      },
       { label: tt('重置演示数据'), onClick: () => void store.resetDemo() },
       { divider: true, label: tt('') },
       { label: tt('退出'), shortcut: 'Alt+F4', onClick: () => window.close() },
