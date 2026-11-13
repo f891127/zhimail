@@ -15,8 +15,8 @@ files:
   - '!**/{README*,CHANGELOG*,LICENSE*,AUTHORS*,NOTICE*,*.md}'
   - '!**/{test,tests,__tests__,example,examples,docs,doc,benchmark,benchmarks}/**'
   - '!**/{.eslintrc,.editorconfig,.prettierrc}/**'
-  # docx 同时发布 cjs / mjs / iife / umd 四种构建，主进程只用 cjs，其余可省 8MB+
-  - '!node_modules/docx/**/*.{mjs,iife.js,umd.cjs}'
+  # docx 同时发布 cjs / mjs / iife / umd 四种构建：main 指向 umd.cjs，只需保留 cjs 与 umd.cjs
+  - '!node_modules/docx/**/*.{mjs,iife.js}'
 
 asar: true
 asarUnpack:
