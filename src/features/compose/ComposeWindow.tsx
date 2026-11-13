@@ -18,7 +18,7 @@ const ASSIST_ACTIONS: { id: string; label: string; hint: string }[] = [
 
 export function ComposeWindow() {
   const store = useAppStore();
-  const { compose, accounts, aiBusy, aiProgress } = store;
+  const { compose, accounts, aiBusy, aiProgress, sendProgress } = store;
   const editorRef = useRef<HTMLDivElement>(null);
   const initialHtml = useRef(compose.html);
   const [showCc, setShowCc] = useState(Boolean(compose.cc));
@@ -91,6 +91,7 @@ export function ComposeWindow() {
   };
 
   const send = async () => {
+    if (sending) return;
     setSending(true);
     try {
       await store.sendCompose();
@@ -103,7 +104,21 @@ export function ComposeWindow() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 p-6">
-      <div className="flex h-[min(760px,92vh)] w-[min(980px,94vw)] animate-rise-in flex-col overflow-hidden rounded-lg border border-shell-line bg-white shadow-[0_16px_48px_rgba(16,24,40,0.22)]">
+      <div className="relative flex h-[min(760px,92vh)] w-[min(980px,94vw)] animate-rise-in flex-col overflow-hidden rounded-lg border border-shell-line bg-white shadow-[0_16px_48px_rgba(16,24,40,0.22)]">
+        {/* 发送中：半透明遮罩 + 进度提示，避免误以为没反应 */}
+        {sending && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-white/78 backdrop-blur-[1px]">
+            <Icon name="refresh" size={22} className="animate-spin text-brand-600" />
+            <p className="text-sm font-medium text-shell-text">正在发送邮件…</p>
+            <p className="max-w-[70%] text-center text-xs text-shell-sub">
+              {sendProgress?.detail ?? '正在连接邮件服务器，请稍候'}
+            </p>
+            <p className="text-[11px] text-shell-faint">
+              收件人：{compose.to || '（未填写）'}
+              {compose.attachments?.length ? ` · 附件 ${compose.attachments.length} 个` : ''}
+            </p>
+          </div>
+        )}
         {/* 标题栏 */}
         <div className="flex h-9 shrink-0 items-center gap-2 border-b border-shell-line bg-shell-chrome px-3">
           <Icon name="compose" size={13} className="text-brand-600" />

@@ -463,6 +463,14 @@ export interface ZhimailApi {
   messages: {
     list: (query: MessageQuery) => Promise<{ total: number; items: MessageMeta[] }>;
     attachmentData: (payload: { messageId: string; filename: string }) => Promise<AttachmentDataResult>;
+    attachmentOpen: (payload: {
+      messageId: string;
+      filename: string;
+    }) => Promise<{ ok: boolean; path?: string; error?: string }>;
+    attachmentSave: (payload: {
+      messageId: string;
+      filename: string;
+    }) => Promise<{ ok: boolean; path?: string; error?: string; canceled?: boolean }>;
     get: (id: string) => Promise<MessageFull | undefined>;
     thread: (threadId: string) => Promise<MessageMeta[]>;
     threads: (query: MessageQuery) => Promise<{ total: number; items: ThreadSummary[] }>;
@@ -596,6 +604,7 @@ declare global {
       setSkin?: (id: string) => void;
       showUpdateDialog?: () => void;
       selectMulti?: (count?: number) => void;
+    selectBySubject?: (keyword: string) => void;
       showMail?: () => void;
       showSettings?: (tab?: string) => void;
       maximizeAIPanel?: () => void;

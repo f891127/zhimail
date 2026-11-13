@@ -122,6 +122,8 @@ interface State {
   todoStats: TodoStats;
 
   syncProgress: SyncProgress | null;
+  /** 发信阶段：connecting / sent / failed */
+  sendProgress: { stage: string; detail?: string } | null;
   toasts: Toast[];
   settingsOpen: boolean;
   changelogOpen: boolean;
@@ -317,6 +319,7 @@ export const useAppStore = create<State>((set, get) => ({
   todoStats: { total: 0, pending: 0, done: 0, overdue: 0, high: 0 },
 
   syncProgress: null,
+  sendProgress: null,
   toasts: [],
   settingsOpen: false,
   changelogOpen: false,
@@ -377,6 +380,7 @@ export const useAppStore = create<State>((set, get) => ({
 
     // 事件订阅
     api.on('sync:progress', (payload) => set({ syncProgress: payload as SyncProgress }));
+    api.on('send:progress', (payload) => set({ sendProgress: payload as { stage: string; detail?: string } }));
     api.on('ai:progress', (payload) => set({ aiProgress: (payload as { message: string }).message }));
     api.on('brief:generated', (payload) => {
       const brief = payload as Brief;
@@ -445,6 +449,16 @@ export const useAppStore = create<State>((set, get) => ({
         if (first) set({ selectedBriefId: first.id });
       },
       showTodos: () => set({ view: 'todos', aiPanelOpen: false }),
+      /** 截图用：按主题关键词选中一封邮件 */
+      selectBySubject: (keyword: string) => {
+        void (async () => {
+          if (!get().messages.length) await get().loadMessages();
+          const hit = get().messages.find((item) => (item.subject || '').includes(keyword));
+          if (!hit) return;
+          set({ view: 'mail', aiPanelOpen: false });
+          await get().selectMessage(hit.id);
+        })();
+      },
       /** 截图用：选中前 N 封，验证多选样式 */
       selectMulti: (count = 3) => {
         void (async () => {
@@ -1172,6 +1186,7 @@ export const useAppStore = create<State>((set, get) => ({
       get().pushToast({ type: 'error', title: '请填写收件人' });
       return;
     }
+    set({ sendProgress: { stage: 'connecting', detail: '正在提交发送任务…' } });
     const result = await api.messages.send({
       accountId: compose.accountId,
       to: compose.to,
@@ -1184,6 +1199,7 @@ export const useAppStore = create<State>((set, get) => ({
       references: compose.references,
       attachments: compose.attachments ?? [],
     });
+    set({ sendProgress: null });
     if (result.ok) {
       set((state) => ({ compose: { ...state.compose, open: false } }));
       await get().reloadFolders();

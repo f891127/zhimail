@@ -357,7 +357,12 @@ export function ReadingPane() {
             {selectedMessage.body.attachments.map((attachment) => (
               <button
                 key={`${attachment.index}-${attachment.filename}`}
-                onDoubleClick={() => attachment.localPath && void api.system.openPath(attachment.localPath)}
+                onDoubleClick={() =>
+                  void api.messages.attachmentOpen({
+                    messageId: selectedMessage.id,
+                    filename: attachment.filename,
+                  })
+                }
                 type="button"
                 onClick={() => {
                   const previewOn = store.settings?.mail?.attachmentPreview ?? true;

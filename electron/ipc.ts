@@ -465,7 +465,17 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('messages/send', async (_event, draft: DraftInput) => {
     const account = store.getAccount(draft.accountId);
     if (!account) return { ok: false, error: '账户不存在' };
+    // 分阶段上报，界面上能看到「正在连接服务器 / 正在发送 / 正在写入已发送」
+    emit('send:progress', {
+      stage: 'connecting',
+      detail: `正在连接 ${account.smtp?.host ?? 'SMTP'} 服务器并投递邮件…`,
+    });
+    const started = Date.now();
     const result = await smtpService.send(account, draft);
+    emit('send:progress', {
+      stage: result.ok ? 'sent' : 'failed',
+      detail: result.ok ? `已发送（${((Date.now() - started) / 1000).toFixed(1)} 秒）` : result.error,
+    });
     if (result.ok) {
       // 写入已发送文件夹（本地副本）
       const sentFolder = store
@@ -768,9 +778,51 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('app/defaultMailClient/set', async (_event, enabled: boolean) => setDefaultMailClient(enabled));
 
-  ipcMain.handle('messages/attachmentData', (_event, payload: { messageId: string; filename: string }) => {
+  /** 确保附件已落盘：本地没有就从服务器重新取一次整封邮件（同时会把附件写下来） */
+  async function ensureAttachment(messageId: string, filename: string): Promise<string | null> {
+    const direct = store.attachmentPath(messageId, filename);
+    if (fs.existsSync(direct)) return direct;
+    const meta = store.getMessageMeta(messageId);
+    if (!meta) return null;
+    const account = store.getAccount(meta.accountId);
+    const folder = folderOf(meta.folderId);
+    if (account && folder && !account.demo && folder.remotePath) {
+      try {
+        await loadMessage(messageId);
+      } catch (error) {
+        console.warn('[ipc] 附件按需下载失败', (error as Error).message);
+      }
+    }
+    return fs.existsSync(direct) ? direct : null;
+  }
+
+  ipcMain.handle('messages/attachmentOpen', async (_event, payload: { messageId: string; filename: string }) => {
+    const file = await ensureAttachment(payload.messageId, payload.filename);
+    if (!file) return { ok: false, error: '附件还没有下载完成，或服务器上已不存在该附件' };
+    const error = await shell.openPath(file);
+    return error ? { ok: false, error } : { ok: true, path: file };
+  });
+
+  ipcMain.handle('messages/attachmentSave', async (_event, payload: { messageId: string; filename: string }) => {
+    const file = await ensureAttachment(payload.messageId, payload.filename);
+    if (!file) return { ok: false, error: '附件还没有下载完成，或服务器上已不存在该附件' };
+    const result = await dialog.showSaveDialog({
+      title: '另存附件',
+      defaultPath: payload.filename,
+      buttonLabel: '保存',
+    });
+    if (result.canceled || !result.filePath) return { ok: false, canceled: true };
     try {
-      const file = store.attachmentPath(payload.messageId, payload.filename);
+      fs.copyFileSync(file, result.filePath);
+      return { ok: true, path: result.filePath };
+    } catch (error) {
+      return { ok: false, error: `保存失败：${(error as Error).message}` };
+    }
+  });
+
+  ipcMain.handle('messages/attachmentData', async (_event, payload: { messageId: string; filename: string }) => {
+    try {
+      const file = (await ensureAttachment(payload.messageId, payload.filename)) ?? store.attachmentPath(payload.messageId, payload.filename);
       if (!fs.existsSync(file)) return { ok: false, error: '附件文件不存在（可能未下载或已被清理）' };
       const stat = fs.statSync(file);
       if (stat.size > 20 * 1024 * 1024) return { ok: false, error: '附件超过 20MB，预览已跳过，请直接保存到本地打开' };

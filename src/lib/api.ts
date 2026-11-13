@@ -120,6 +120,8 @@ const mockApi: ZhimailApi = {
   messages: {
     list: async () => ({ total: 0, items: [] as MessageMeta[] }),
     attachmentData: async () => ({ ok: false, error: '浏览器预览模式不支持' }),
+    attachmentOpen: async () => ({ ok: false, error: '浏览器预览模式不支持打开本地附件' }),
+    attachmentSave: async () => ({ ok: false, error: '浏览器预览模式不支持保存附件' }),
     get: async () => undefined as MessageFull | undefined,
     thread: async () => [] as MessageMeta[],
     threads: async () => ({ total: 0, items: [] as ThreadSummary[] }),

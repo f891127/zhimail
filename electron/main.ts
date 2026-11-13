@@ -418,18 +418,13 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
         closeDialog();
         window.__zhimailDev?.showMail?.();
         // 选中带附件的邮件，再点开附件预览
-        setTimeout(() => {
-          const row = Array.from(document.querySelectorAll('button, div[role="button"]')).find((el) =>
-            (el.textContent || '').includes('客户反馈：灭菌后器械包出现湿包现象'),
-          );
-          if (row) row.click();
-        }, 900);
+        window.__zhimailDev?.selectBySubject?.('湿包');
         setTimeout(() => {
           const chip = Array.from(document.querySelectorAll('button')).find(
-            (el) => /KB|MB/.test(el.textContent || '') && /照片|电气|PDF/.test(el.textContent || ''),
+            (el) => (el.textContent || '').includes('湿包现场记录'),
           );
           if (chip) chip.click();
-        }, 2600);
+        }, 3000);
         return true;
       })()`,
       waitMs: 5200,

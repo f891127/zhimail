@@ -7,6 +7,7 @@ const invoke = (channel: string, ...args: unknown[]) => ipcRenderer.invoke(chann
 const EVENT_CHANNELS = [
   'sync:progress',
   'mail:new',
+  'send:progress',
   'mail:changed',
   'mail:open',
   'ai:progress',
@@ -41,6 +42,10 @@ const api = {
     list: (query: unknown) => invoke('messages/list', query),
     attachmentData: (payload: { messageId: string; filename: string }) =>
       invoke('messages/attachmentData', payload),
+    attachmentOpen: (payload: { messageId: string; filename: string }) =>
+      invoke('messages/attachmentOpen', payload),
+    attachmentSave: (payload: { messageId: string; filename: string }) =>
+      invoke('messages/attachmentSave', payload),
     get: (id: string) => invoke('messages/get', id),
     thread: (threadId: string) => invoke('messages/thread', threadId),
     threads: (query: unknown) => invoke('messages/threads', query),

@@ -17,6 +17,25 @@ export function AttachmentPreview({
   onClose: () => void;
 }) {
   const [state, setState] = useState<{ loading: boolean; result?: AttachmentDataResult }>({ loading: true });
+  const [busy, setBusy] = useState<'open' | 'save' | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
+
+  async function handleOpen() {
+    setBusy('open');
+    setHint(null);
+    const result = await api.messages.attachmentOpen({ messageId, filename });
+    setBusy(null);
+    if (!result.ok) setHint(result.error ?? '打开失败');
+  }
+
+  async function handleSave() {
+    setBusy('save');
+    setHint(null);
+    const result = await api.messages.attachmentSave({ messageId, filename });
+    setBusy(null);
+    if (result.ok) setHint(`已保存到 ${result.path}`);
+    else if (!result.canceled) setHint(result.error ?? '保存失败');
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -51,11 +70,35 @@ export function AttachmentPreview({
           <Icon name="paperclip" size={13} className="text-shell-sub" />
           <span className="min-w-0 flex-1 truncate text-xs font-medium text-shell-text">{filename}</span>
           {typeof size === 'number' && <span className="text-[11px] text-shell-faint">{fileSize(size)}</span>}
+          <button
+            type="button"
+            className="tool-btn h-6 px-2 text-[11px]"
+            disabled={busy !== null}
+            onClick={() => void handleOpen()}
+          >
+            <Icon name="external" size={12} />
+            打开
+          </button>
+          <button
+            type="button"
+            className="tool-btn h-6 px-2 text-[11px]"
+            disabled={busy !== null}
+            onClick={() => void handleSave()}
+          >
+            <Icon name="download" size={12} />
+            另存为
+          </button>
           <button type="button" className="rounded p-1 hover:bg-black/[0.06]" title="关闭" onClick={onClose}>
             <Icon name="close" size={12} />
           </button>
         </div>
 
+        {hint && (
+          <div className="flex shrink-0 items-center gap-2 border-b border-shell-lineSoft bg-amber-50 px-3 py-1.5 text-[11px] text-amber-800">
+            <Icon name="info" size={12} />
+            <span className="min-w-0 flex-1 truncate">{hint}</span>
+          </div>
+        )}
         <div className="min-h-0 flex-1 overflow-auto bg-[#f6f7f9]">
           {state.loading && (
             <div className="flex h-full items-center justify-center gap-2 text-xs text-shell-faint">
@@ -68,7 +111,7 @@ export function AttachmentPreview({
             <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center">
               <Icon name="alert" size={26} className="text-amber-500" />
               <p className="text-xs text-shell-sub">{state.result.error ?? '无法预览该附件'}</p>
-              <p className="text-[11px] text-shell-faint">可在阅读窗格中双击附件，用系统默认程序打开。</p>
+              <p className="text-[11px] text-shell-faint">可点右上角「打开」用系统默认程序打开，或「另存为」保存到本地。</p>
             </div>
           )}
 
@@ -92,7 +135,7 @@ export function AttachmentPreview({
             <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center">
               <Icon name="document" size={26} className="text-shell-line" />
               <p className="text-xs text-shell-sub">该类型暂不支持在线预览</p>
-              <p className="text-[11px] text-shell-faint">可在阅读窗格中双击附件，用系统默认程序打开。</p>
+              <p className="text-[11px] text-shell-faint">可点右上角「打开」用系统默认程序打开，或「另存为」保存到本地。</p>
             </div>
           )}
         </div>
