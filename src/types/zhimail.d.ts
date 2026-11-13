@@ -228,6 +228,8 @@ export interface AppSettings {
     readerActions: string[];
     /** 操作条最多显示几项，超出的收进「更多」 */
     readerActionLimit: number;
+    /** 顶部工具栏显示哪些按钮，顺序即展示顺序 */
+    toolbarActions: string[];
     /** 皮肤 id */
     skin: string;
   };

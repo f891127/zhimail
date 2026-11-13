@@ -1,10 +1,11 @@
-/** 工具栏：左侧只有「写邮件」，其余操作与搜索统一排在右侧（参照 Foxmail 新版布局） */
+/** 工具栏：左侧「写邮件」（固定）+ 可选的「收取」，右侧为可配置的邮件操作与视图入口 */
 import { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { Icon } from '@/components/Icon';
 import { SkinPicker } from '@/components/SkinPicker';
 import { ZH_LABEL_KEYS } from '@/lib/i18n';
 import { useT } from '@/lib/useT';
+import { DEFAULT_TOOLBAR_ACTIONS, TOOLBAR_ACTIONS } from '@/lib/toolbarActions';
 
 export function ToolBar() {
   const store = useAppStore();
@@ -42,22 +43,158 @@ export function ToolBar() {
   const flagged = selectedMessage?.flags.includes('\\Flagged') ?? false;
   const realAccount = accounts.find((account) => !account.demo);
 
+  // 工具栏按钮由设置决定：勾选哪些显示、顺序即展示顺序（空配置时用出厂默认）
+  const configured = store.settings?.ui?.toolbarActions;
+  const enabledIds = configured && configured.length ? configured : DEFAULT_TOOLBAR_ACTIONS;
+  const known = new Set(TOOLBAR_ACTIONS.map((action) => action.id));
+  const ids = enabledIds.filter((id) => known.has(id));
+  const leftIds = ids.filter((id) => id === 'collect');
+  const rightIds = ids.filter((id) => id !== 'collect');
+  const firstViewIndex = rightIds.findIndex((id) => {
+    const def = TOOLBAR_ACTIONS.find((action) => action.id === id);
+    return def?.group === '视图与工具';
+  });
+
+  /** 每个按钮的实际渲染 */
+  const renderAction = (id: string) => {
+    const def = TOOLBAR_ACTIONS.find((action) => action.id === id);
+    if (!def) return null;
+    const disabled = Boolean(def.needSelection) && !selectedMessageId;
+    const base = 'tool-btn';
+    switch (id) {
+      case 'collect':
+        return (
+          <button
+            key={id}
+            type="button"
+            className={`${base} shrink-0 border border-shell-line`}
+            title={realAccount ? '收取全部账户的邮件（F5）' : '演示邮箱无需收取'}
+            onClick={() => void syncAll()}
+          >
+            <Icon name="refresh" size={14} className="text-brand-600" />
+            <span>{def.label}</span>
+          </button>
+        );
+      case 'reply':
+        return (
+          <button key={id} type="button" className={base} disabled={disabled} onClick={() => replyToMessage('reply')} title={def.title}>
+            <Icon name={def.icon} size={15} />
+            <span>{def.label}</span>
+          </button>
+        );
+      case 'replyAll':
+        return (
+          <button key={id} type="button" className={base} disabled={disabled} onClick={() => replyToMessage('replyAll')} title={def.title}>
+            <Icon name={def.icon} size={15} />
+            <span>全部</span>
+          </button>
+        );
+      case 'forward':
+        return (
+          <button key={id} type="button" className={base} disabled={disabled} onClick={() => replyToMessage('forward')} title={def.title}>
+            <Icon name={def.icon} size={15} />
+            <span>{def.label}</span>
+          </button>
+        );
+      case 'star':
+        return (
+          <button
+            key={id}
+            type="button"
+            className={`${base} ${flagged ? 'text-accent-500' : ''}`}
+            disabled={disabled}
+            onClick={() => selectedMessageId && void toggleFlag([selectedMessageId], '\\Flagged', !flagged)}
+            title={def.title}
+          >
+            <Icon name={flagged ? 'star-filled' : 'star'} size={15} />
+            <span>{flagged ? '已星标' : def.label}</span>
+          </button>
+        );
+      case 'delete':
+        return (
+          <button
+            key={id}
+            type="button"
+            className={base}
+            disabled={disabled}
+            onClick={() => {
+              const targets = selectedIds.length > 1 ? selectedIds : selectedMessageId ? [selectedMessageId] : [];
+              if (targets.length) void deleteMessages(targets);
+            }}
+            title={def.title}
+          >
+            <Icon name={def.icon} size={15} />
+            <span>{def.label}</span>
+          </button>
+        );
+      case 'sync':
+        return (
+          <button key={id} type="button" className={base} onClick={() => void syncNow()} title={realAccount ? def.title : '演示邮箱无需同步'}>
+            <Icon name={def.icon} size={15} />
+            <span>{tt('同步')}</span>
+          </button>
+        );
+      case 'brief':
+        return (
+          <button
+            key={id}
+            type="button"
+            className={`${base} ${view === 'briefs' ? 'chrome-btn-active' : ''}`}
+            onClick={() => setView('briefs')}
+            title={def.title}
+          >
+            <Icon name={def.icon} size={15} />
+            <span>{tt('简报')}</span>
+          </button>
+        );
+      case 'todos':
+        return (
+          <button
+            key={id}
+            type="button"
+            className={`${base} ${view === 'todos' ? 'chrome-btn-active' : ''}`}
+            onClick={() => setView('todos')}
+            title={def.title}
+          >
+            <Icon name={def.icon} size={15} />
+            <span>{def.label}</span>
+          </button>
+        );
+      case 'ai':
+        return (
+          <button
+            key={id}
+            type="button"
+            className={`${base} ${aiPanelOpen ? 'chrome-btn-active' : ''}`}
+            onClick={() => setAIPanel(!aiPanelOpen)}
+            title={def.title}
+          >
+            <Icon name={def.icon} size={15} className={aiBusy ? 'animate-pulse-soft text-brand-500' : 'text-brand-500'} />
+            <span>{tt('AI 助手')}</span>
+          </button>
+        );
+      case 'skin':
+        return <SkinPicker key={id} />;
+      case 'settings':
+        return (
+          <button key={id} type="button" className={base} onClick={() => openSettings('ai')} title={def.title}>
+            <Icon name={def.icon} size={15} />
+            <span>{def.label}</span>
+          </button>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-shell-line bg-white px-2.5">
-      {/* 左侧：只保留写邮件 */}
+      {/* 左侧：写邮件固定，收取可按配置出现 */}
       <button type="button" className="primary-btn shrink-0" onClick={() => openCompose()}>
         <Icon name="compose" size={14} />
         写邮件
       </button>
-      <button
-        type="button"
-        className="tool-btn shrink-0 border border-shell-line"
-        title={realAccount ? '收取全部账户的邮件（F5）' : '演示邮箱无需收取'}
-        onClick={() => void syncAll()}
-      >
-        <Icon name="refresh" size={14} className="text-brand-600" />
-        <span>收取</span>
-      </button>
+      {leftIds.map((id) => renderAction(id))}
 
       {/* 中间弹性留白，把搜索与操作推到右侧 */}
       <div className="flex-1" />
@@ -92,109 +229,16 @@ export function ToolBar() {
         </button>
       </div>
 
-      {/* 搜索框右侧：常用邮件操作 */}
+      {/* 右侧：按配置顺序渲染，邮件操作与视图入口之间加分隔线 */}
       <div className="ml-1.5 flex shrink-0 items-center gap-0.5">
-        <button
-          type="button"
-          className="tool-btn"
-          disabled={!selectedMessageId}
-          onClick={() => replyToMessage('reply')}
-          title="回复 (Ctrl+R)"
-        >
-          <Icon name="reply" size={15} />
-          <span>{tt('回复')}</span>
-        </button>
-        <button
-          type="button"
-          className="tool-btn"
-          disabled={!selectedMessageId}
-          onClick={() => replyToMessage('replyAll')}
-          title="全部回复 (Ctrl+Shift+R)"
-        >
-          <Icon name="reply-all" size={15} />
-          <span>全部</span>
-        </button>
-        <button
-          type="button"
-          className="tool-btn"
-          disabled={!selectedMessageId}
-          onClick={() => replyToMessage('forward')}
-          title="转发 (Ctrl+F)"
-        >
-          <Icon name="forward" size={15} />
-          <span>转发</span>
-        </button>
-        <div className="mx-0.5 h-5 w-px bg-shell-lineSoft" />
-        <button
-          type="button"
-          className={`tool-btn ${flagged ? 'text-accent-500' : ''}`}
-          disabled={!selectedMessageId}
-          onClick={() => selectedMessageId && void toggleFlag([selectedMessageId], '\\Flagged', !flagged)}
-          title="加星标 / 取消星标"
-        >
-          <Icon name={flagged ? 'star-filled' : 'star'} size={15} />
-          <span>{flagged ? '已星标' : '星标'}</span>
-        </button>
-        <button
-          type="button"
-          className="tool-btn"
-          disabled={!selectedMessageId}
-          onClick={() => {
-            const ids = selectedIds.length > 1 ? selectedIds : selectedMessageId ? [selectedMessageId] : [];
-            if (ids.length) void deleteMessages(ids);
-          }}
-          title="删除 (Delete)"
-        >
-          <Icon name="trash" size={15} />
-          <span>删除</span>
-        </button>
-        <button
-          type="button"
-          className="tool-btn"
-          onClick={() => void syncNow()}
-          title={realAccount ? '同步邮箱' : '演示邮箱无需同步'}
-        >
-          <Icon name="refresh" size={15} />
-          <span>{tt('同步')}</span>
-        </button>
-      </div>
-
-      <div className="mx-0.5 h-5 w-px bg-shell-lineSoft" />
-
-      {/* 视图入口与设置 */}
-      <div className="flex shrink-0 items-center gap-0.5">
-        <button
-          type="button"
-          className={`tool-btn ${view === 'briefs' ? 'chrome-btn-active' : ''}`}
-          onClick={() => setView('briefs')}
-          title="邮件简报"
-        >
-          <Icon name="document" size={15} />
-          <span>{tt('简报')}</span>
-        </button>
-        <button
-          type="button"
-          className={`tool-btn ${view === 'todos' ? 'chrome-btn-active' : ''}`}
-          onClick={() => setView('todos')}
-          title="待办事项"
-        >
-          <Icon name="checklist" size={15} />
-          <span>待办</span>
-        </button>
-        <button
-          type="button"
-          className={`tool-btn ${aiPanelOpen ? 'chrome-btn-active' : ''}`}
-          onClick={() => setAIPanel(!aiPanelOpen)}
-          title="AI 助手 (Ctrl+Shift+A)"
-        >
-          <Icon name="sparkles" size={15} className={aiBusy ? 'animate-pulse-soft text-brand-500' : 'text-brand-500'} />
-          <span>{tt('AI 助手')}</span>
-        </button>
-        <SkinPicker />
-        <button type="button" className="tool-btn" onClick={() => openSettings('ai')} title="设置">
-          <Icon name="settings" size={15} />
-          <span>设置</span>
-        </button>
+        {rightIds.map((id, index) => (
+          <span key={id} className="flex items-center gap-0.5">
+            {index === firstViewIndex && firstViewIndex > 0 && (
+              <span className="mx-0.5 h-5 w-px bg-shell-lineSoft" />
+            )}
+            {renderAction(id)}
+          </span>
+        ))}
       </div>
     </div>
   );

@@ -361,6 +361,8 @@ export interface UISettings {
   readerActions: string[];
   /** 阅读窗格操作条最多显示项数 */
   readerActionLimit: number;
+  /** 顶部工具栏显示哪些按钮，顺序即展示顺序 */
+  toolbarActions: string[];
   /** 皮肤 id：default / gmail / outlook / foxmail / filo / notion / neat */
   skin: string;
 }

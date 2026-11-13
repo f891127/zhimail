@@ -16,6 +16,7 @@ import {
   READER_ACTION_LIMIT_MIN,
   READER_ACTION_VISIBLE_LIMIT,
 } from '@/lib/readerActions';
+import { DEFAULT_TOOLBAR_ACTIONS, TOOLBAR_ACTION_GROUPS, TOOLBAR_ACTIONS } from '@/lib/toolbarActions';
 
 type TabId = 'account' | 'ai' | 'ui' | 'brief' | 'data' | 'update' | 'about' | 'app';
 
@@ -510,6 +511,17 @@ export function SettingsDialog() {
     if (index < 0 || target < 0 || target >= list.length) return;
     [list[index], list[target]] = [list[target], list[index]];
     await store.updateSettings({ ui: { ...settings.ui, readerActions: list } });
+  };
+
+  /** 调整顶部工具栏顺序 */
+  const moveToolbarAction = async (id: string, delta: number) => {
+    if (!settings) return;
+    const list = [...(settings.ui.toolbarActions ?? [])];
+    const index = list.indexOf(id);
+    const target = index + delta;
+    if (index < 0 || target < 0 || target >= list.length) return;
+    [list[index], list[target]] = [list[target], list[index]];
+    await store.updateSettings({ ui: { ...settings.ui, toolbarActions: list } });
   };
 
   /** 测试余额查询：把每个尝试过的地址与返回都列出来 */
@@ -1238,6 +1250,78 @@ export function SettingsDialog() {
                   <p className="mt-1 text-[10px] leading-4 text-shell-faint">
                     皮肤会立即生效并自动保存；也可以在工具栏右上角的「皮肤」按钮里切换。
                   </p>
+                </div>
+
+                <div className="text-[11px] leading-5 text-shell-sub">
+                  顶部工具栏（写邮件右侧、搜索框右侧那一排）显示哪些按钮由此决定，勾选顺序即展示顺序；
+                  未勾选的按钮不会出现在工具栏上，功能仍可通过「工具」菜单使用。
+                  <span className="ml-1 text-brand-600">勾选即时生效并自动保存。</span>
+                </div>
+
+                {TOOLBAR_ACTION_GROUPS.map((group) => (
+                  <div key={group} className="rounded border border-shell-lineSoft bg-white px-3 py-2.5">
+                    <div className="mb-1.5 text-[11px] font-semibold text-shell-sub">{group}</div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                      {TOOLBAR_ACTIONS.filter((action) => action.group === group).map((action) => {
+                        const list = settings.ui.toolbarActions ?? DEFAULT_TOOLBAR_ACTIONS;
+                        const selected = list.includes(action.id);
+                        return (
+                          <div key={action.id} className="flex items-center gap-2 text-[11px] text-shell-text">
+                            <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={() =>
+                                  void saveUISettings({
+                                    toolbarActions: selected
+                                      ? list.filter((id) => id !== action.id)
+                                      : [...list, action.id],
+                                  })
+                                }
+                                className="h-3.5 w-3.5 accent-brand-500"
+                              />
+                              <Icon name={action.icon} size={12} className={action.brand ? 'text-brand-500' : 'text-shell-sub'} />
+                              <span>{action.label}</span>
+                              <span className="truncate text-[10px] text-shell-faint">{action.title}</span>
+                            </label>
+                            {selected && (
+                              <span className="flex shrink-0 items-center">
+                                <button
+                                  type="button"
+                                  className="rounded px-0.5 text-shell-faint hover:bg-black/[0.06] hover:text-brand-600"
+                                  title="往前挪"
+                                  onClick={() => void moveToolbarAction(action.id, -1)}
+                                >
+                                  <Icon name="chevron-right" size={11} className="rotate-180" />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded px-0.5 text-shell-faint hover:bg-black/[0.06] hover:text-brand-600"
+                                  title="往后挪"
+                                  onClick={() => void moveToolbarAction(action.id, 1)}
+                                >
+                                  <Icon name="chevron-right" size={11} />
+                                </button>
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] text-shell-faint">
+                    当前已选 {(settings.ui.toolbarActions ?? DEFAULT_TOOLBAR_ACTIONS).length} 项；「写邮件」按钮固定显示在最左
+                  </span>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => void saveUISettings({ toolbarActions: [...DEFAULT_TOOLBAR_ACTIONS] })}
+                  >
+                    恢复默认工具栏
+                  </button>
                 </div>
 
                 <div className="text-[11px] leading-5 text-shell-sub">
