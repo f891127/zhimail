@@ -688,6 +688,11 @@ export function SettingsDialog() {
                     </div>
                     <div>
                       <label className="field-label">授权码 / 密码</label>
+                      {form.password.length > 0 && form.password.length < 12 && (
+                        <span className="mb-1 block text-[10px] leading-4 text-amber-600">
+                          腾讯企业邮 / QQ 邮箱的客户端专用密码一般为 16 位；若填写的是网页登录密码，登录会失败。
+                        </span>
+                      )}
                       <input
                         type="password"
                         value={form.password}
@@ -721,7 +726,7 @@ export function SettingsDialog() {
                       保存账户
                     </button>
                     <span className="ml-auto text-[10px] text-shell-faint">
-                      QQ / 163 等邮箱需使用「客户端授权码」，不是登录密码
+                      QQ / 163 / 腾讯企业邮需使用「客户端授权码 / 专用密码」，不是登录密码；企业邮还需管理员开启客户端（IMAP/SMTP）权限
                     </span>
                   </div>
                 </div>

@@ -614,8 +614,18 @@ export function describeImapError(error: unknown): string {
   const err = error as any;
   const code = err?.code ?? err?.responseCode;
   const message: string = err?.message ?? String(error);
-  if (code === 'EAUTH' || /authentication failed|invalid credentials|login failed/i.test(message)) {
-    return '认证失败：请确认邮箱地址与授权码（QQ/163 等需使用客户端授权码，而非登录密码）';
+  // 服务器返回的原始原因（例如 "LOGIN failed" / "user is disabled"），对排查最有用
+  const serverText: string =
+    err?.responseText ?? err?.response ?? err?.serverResponse ?? '';
+  const withServer = (base: string) => (serverText ? `${base}（服务器返回：${String(serverText).slice(0, 160)}）` : base);
+  if (
+    err?.authenticationFailed === true ||
+    code === 'EAUTH' ||
+    /authentication failed|invalid credentials|login failed|command failed|auth/i.test(message)
+  ) {
+    return withServer(
+      'IMAP 登录被服务器拒绝：请确认「用户名」为完整邮箱地址，密码处填写客户端授权码/专用密码（不是网页登录密码），并在邮箱网页版开启 IMAP 服务',
+    );
   }
   if (code === 'ENOTFOUND' || /getaddrinfo|ENOTFOUND/i.test(message)) {
     return '无法解析邮件服务器地址，请检查 IMAP 主机名是否正确';
@@ -629,7 +639,7 @@ export function describeImapError(error: unknown): string {
   if (/certificate|self signed/i.test(message)) {
     return '证书校验失败：服务器使用了自签名证书，请确认服务器地址';
   }
-  return message;
+  return withServer(message);
 }
 
 export const imapService = new ImapService();

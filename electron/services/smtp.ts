@@ -26,8 +26,10 @@ function buildTransporter(account: Account) {
 export function describeSmtpError(error: unknown): string {
   const err = error as any;
   const message: string = err?.message ?? String(error);
+  const serverText: string = err?.response ?? err?.responseText ?? '';
   if (err?.code === 'EAUTH' || /authentication|535|550/i.test(message)) {
-    return 'SMTP 认证失败：请确认授权码有效，且邮箱已开启 SMTP 服务';
+    const base = 'SMTP 认证失败：请确认密码处填写的是客户端授权码/专用密码，且邮箱已开启 SMTP 服务';
+    return serverText ? `${base}（服务器返回：${String(serverText).slice(0, 160)}）` : base;
   }
   if (err?.code === 'ENOTFOUND') return '无法解析 SMTP 服务器地址，请检查主机名';
   if (err?.code === 'ECONNREFUSED') return 'SMTP 连接被拒绝，请核对端口与加密方式（465 为 SSL，587 为 STARTTLS）';
