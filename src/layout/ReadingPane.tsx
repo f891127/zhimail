@@ -134,11 +134,20 @@ export function ReadingPane() {
     todos: () => void store.extractTodosFromMessage(selectedMessage.id),
   };
 
-  const overflowItems: ContextMenuItem[] = overflowActions.map((action) => ({
-    label: action.label,
-    disabled: aiBusy,
-    onClick: () => readerHandlers[action.id]?.(),
-  }));
+  const overflowItems: ContextMenuItem[] = [
+    ...overflowActions.map((action) => ({
+      label: action.label,
+      disabled: aiBusy,
+      onClick: () => readerHandlers[action.id]?.(),
+    })),
+    // 编码问题排查：把服务器上的原始邮件导出成 .eml
+    {
+      label: '导出邮件原文（.eml）',
+      onClick: () => {
+        if (selectedMessage) void store.exportSource(selectedMessage.id);
+      },
+    },
+  ];
 
 
 

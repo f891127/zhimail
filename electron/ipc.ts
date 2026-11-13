@@ -486,12 +486,34 @@ export function registerIpcHandlers(): void {
       try {
         const result = await imapService.redecodeMessage(account, folder, meta.uid, payload.charset);
         if (!result) return { ok: false, error: '服务器上没有取到邮件原文' };
-        return { ok: true, body: result.body, charset: result.charset };
+        return { ok: true, body: result.body, charset: result.charset, stillBroken: result.stillBroken };
       } catch (error) {
         return { ok: false, error: `重新解码失败：${(error as Error).message}` };
       }
     },
   );
+  ipcMain.handle('messages/exportSource', async (_event, messageId: string) => {
+    const meta = store.getMessageMeta(messageId);
+    if (!meta) return { ok: false, error: '邮件已不存在' };
+    const account = store.getAccount(meta.accountId);
+    const folder = folderOf(meta.folderId);
+    if (!account || !folder) return { ok: false, error: '找不到邮件所在的账户或文件夹' };
+    const safeName = (meta.subject || '邮件原文').replace(/[\\/:*?"<>|]/g, '_').slice(0, 60);
+    const result = await dialog.showSaveDialog({
+      title: '导出邮件原文',
+      defaultPath: `${safeName}.eml`,
+      filters: [{ name: '邮件原文', extensions: ['eml'] }],
+      buttonLabel: '导出',
+    });
+    if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+    if (account.demo) return { ok: false, error: '演示邮件没有可导出的原文' };
+    try {
+      const size = await imapService.exportSource(account, folder, meta.uid, result.filePath);
+      return { ok: true, path: result.filePath, size };
+    } catch (error) {
+      return { ok: false, error: `导出失败：${(error as Error).message}` };
+    }
+  });
   ipcMain.handle('messages/send', async (_event, draft: DraftInput) => {
     const account = store.getAccount(draft.accountId);
     if (!account) return { ok: false, error: '账户不存在' };

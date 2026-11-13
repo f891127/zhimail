@@ -354,7 +354,7 @@ export async function parseBestEffort(
 ): Promise<{ parsed: ParsedMail; charset: string; score: number }> {
   const buffer = Buffer.isBuffer(source) ? source : Buffer.from(source, 'binary');
   let best: { parsed: ParsedMail; charset: string; score: number } | null = null;
-  for (const charset of ['utf-8', 'gb18030', 'big5'] as const) {
+  for (const charset of ['utf-8', 'gb18030', 'big5', 'utf-16le', 'utf-16be'] as const) {
     try {
       const parsed = await parseWithCharset(buffer, charset);
       const text =
@@ -1014,13 +1014,41 @@ export class ImapService {
     }
   }
 
+  /** 导出邮件原文（.eml），用于排查编码问题或转发给他人 */
+  async exportSource(account: Account, folder: Folder, uid: number, filePath: string): Promise<number> {
+    const client = this.createClient(account);
+    await client.connect();
+    try {
+      const lock = await client.getMailboxLock(folder.remotePath ?? folder.name);
+      try {
+        const message = (await client.fetchOne(String(uid), { source: true }, { uid: true })) || undefined;
+        if (!message?.source) throw new Error('服务器上没有取到邮件原文');
+        const fs = await import('node:fs');
+        fs.writeFileSync(filePath, message.source);
+        return message.source.length;
+      } finally {
+        lock.release();
+      }
+    } finally {
+      try {
+        await client.logout();
+      } catch {
+        /* 忽略 */
+      }
+    }
+  }
+
   /** 重新解码单封邮件正文：可选指定编码，否则自动挑最像正常中文的一份 */
   async redecodeMessage(
     account: Account,
     folder: Folder,
     uid: number,
     charset?: string,
-  ): Promise<{ body: { text?: string; html?: string; attachments: AttachmentMeta[] }; charset: string } | undefined> {
+  ): Promise<{
+    body: { text?: string; html?: string; attachments: AttachmentMeta[] };
+    charset: string;
+    stillBroken: boolean;
+  } | undefined> {
     const client = this.createClient(account);
     await client.connect();
     try {
@@ -1040,7 +1068,9 @@ export class ImapService {
         };
         store.saveMessageBody(account.id, folder.id, uid, body);
         store.patchMessage(metaId, { snippet: makeSnippet(body.text, body.html) });
-        return { body, charset: result.charset };
+        // 原文本身就带 ◆ 等替换字符时，任何本地解码都救不回来，如实告知用户
+        const stillBroken = looksMojibake(body.text ?? '') || looksMojibake(body.html ?? '');
+        return { body, charset: result.charset, stillBroken };
       } finally {
         lock.release();
       }

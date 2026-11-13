@@ -129,6 +129,7 @@ const mockApi: ZhimailApi = {
     move: notAvailable,
     remove: notAvailable,
     redecode: async () => ({ ok: false, error: '浏览器预览模式不支持重新解码' }),
+    exportSource: async () => ({ ok: false, error: '浏览器预览模式不支持导出原文' }),
     send: notAvailable,
     saveDraft: notAvailable,
   },

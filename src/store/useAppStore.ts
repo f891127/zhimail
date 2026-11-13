@@ -153,6 +153,8 @@ interface State {
   redecoding: boolean;
   /** 重新解码正文：不传 charset 时自动挑最优编码 */
   redecodeMessage: (id: string, charset?: string) => Promise<void>;
+  /** 导出邮件原文（.eml） */
+  exportSource: (id: string) => Promise<void>;
   /** 从待办/简报等入口按邮件 id 直接打开（会自动切到所在账户与文件夹） */
   openMessageById: (id: string) => Promise<boolean>;
   selectMessage: (id: string, modifiers?: { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean }) => Promise<void>;
@@ -595,11 +597,34 @@ export const useAppStore = create<State>((set, get) => ({
             : item,
         ),
       }));
-      get().pushToast({ type: 'info', title: `已重新解码（${result.charset ?? '自动'}）` });
+      if (result.stillBroken) {
+        // 原文里已经是 ◆ 之类的替换字符，本地任何解码都还原不了
+        get().pushToast({
+          type: 'error',
+          title: '原文本身已损坏，无法还原',
+          message: '服务器上的这封邮件正文已含替换字符（发件方编码转换时丢失），可用「导出原文」核对，或让发件人重发、用网页版查看。',
+        });
+      } else {
+        get().pushToast({ type: 'info', title: `已重新解码（${result.charset ?? '自动'}）` });
+      }
     } catch (error) {
       get().pushToast({ type: 'error', title: '重新解码失败', message: (error as Error).message });
     } finally {
       set({ redecoding: false });
+    }
+  },
+
+  exportSource: async (id: string) => {
+    try {
+      const result = await api.messages.exportSource(id);
+      if (result.canceled) return;
+      if (!result.ok) {
+        get().pushToast({ type: 'error', title: '导出原文失败', message: result.error });
+        return;
+      }
+      get().pushToast({ type: 'info', title: '已导出邮件原文', message: result.path });
+    } catch (error) {
+      get().pushToast({ type: 'error', title: '导出原文失败', message: (error as Error).message });
     }
   },
 
