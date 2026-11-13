@@ -148,6 +148,8 @@ interface State {
   toggleAccount: (accountId: string) => void;
   loadMessages: () => Promise<void>;
   /** 选中邮件；按住 Shift 选连续区间，按住 Ctrl/⌘ 点选多封 */
+  /** 从待办/简报等入口按邮件 id 直接打开（会自动切到所在账户与文件夹） */
+  openMessageById: (id: string) => Promise<boolean>;
   selectMessage: (id: string, modifiers?: { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean }) => Promise<void>;
   /** 多选中的邮件 id（含当前选中那封） */
   selectedIds: string[];
@@ -556,6 +558,22 @@ export const useAppStore = create<State>((set, get) => ({
     }
   },
 
+  openMessageById: async (id: string) => {
+    const target = await api.messages.get(id);
+    if (!target) {
+      get().pushToast({
+        type: 'error',
+        title: '来源邮件已不存在',
+        message: '可能已被删除或未同步到本地',
+      });
+      return false;
+    }
+    if (get().selectedAccountId !== target.accountId) set({ selectedAccountId: target.accountId });
+    if (get().selectedFolderId !== target.folderId) await get().selectFolder(target.folderId);
+    set({ view: 'mail', searchKeyword: '', searchActive: false });
+    await get().selectMessage(id);
+    return true;
+  },
   selectMessage: async (id, modifiers) => {
     const cachedTranslation = get().aiOutputs.translate;
     const state = get();
@@ -640,10 +658,10 @@ export const useAppStore = create<State>((set, get) => ({
         }),
       ),
     );
-    const folders = await api.messages.remove(ids);
+    // 先乐观更新界面（立刻消失），再等服务器确认，避免点删除后卡住几秒
     set((state) => ({
-      folders,
       messages: state.messages.filter((item) => !ids.includes(item.id)),
+      messageTotal: Math.max(0, state.messageTotal - ids.filter((id) => state.messages.some((item) => item.id === id)).length),
       // 会话视图也要同步剔除，否则会话模式下删除后列表不刷新
       threads: state.threads
         .map((thread) => ({
@@ -655,9 +673,14 @@ export const useAppStore = create<State>((set, get) => ({
       selectedMessage: ids.includes(state.selectedMessageId ?? '') ? null : state.selectedMessage,
       selectedIds: state.selectedIds.filter((item) => !ids.includes(item)),
     }));
-    // 再按仓储结果重算一次列表与计数，保证与磁盘一致
-    await get().loadMessages();
     get().pushToast({ type: 'info', title: `已删除 ${ids.length} 封邮件` });
+    try {
+      const folders = await api.messages.remove(ids);
+      set({ folders });
+    } catch (error) {
+      get().pushToast({ type: 'error', title: '删除同步失败', message: (error as Error).message });
+      await get().loadMessages();
+    }
   },
 
   moveMessages: async (ids, folderId) => {

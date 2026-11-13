@@ -30,7 +30,7 @@ import { groupThreads } from './services/thread';
 import { runSearch } from './services/search';
 import { generateBrief, exportBrief, listBriefs, getBrief, removeBrief, BRIEF_GROUPS, BRIEF_ROOT_ID } from './services/brief';
 import { createTodoItems, listTodos, removeTodo, toggleTodo, updateTodo, clearCompleted, todoStats } from './services/todo';
-import { seedDemoData, DEMO_ACCOUNT_ID } from './services/demo';
+import { seedDemoData, materializeDemoAttachment, DEMO_ACCOUNT_ID } from './services/demo';
 import { briefScheduler } from './services/scheduler';
 import {
   applyUpdateFeed,
@@ -57,12 +57,14 @@ import { AI_PROVIDERS } from './services/ai/presets';
 import { MAIL_PRESETS } from './services/presets';
 import { isStrongEncryptionAvailable } from './services/crypto';
 import type {
+  Account,
   AccountInput,
   AISettings,
   AppSettings,
   BriefGenerateParams,
   ComposeAssistParams,
   DraftInput,
+  Folder,
   FolderView,
   MessageFull,
   MessageMeta,
@@ -449,16 +451,26 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('messages/delete', async (_event, ids: string[]) => {
     const metas = ids.map((id) => store.getMessageMeta(id)).filter(Boolean) as MessageMeta[];
     store.deleteMessages(ids);
+    // 按「账户 + 文件夹」归组，一组只建一次连接、一次批量删除，避免逐封登录服务器
+    const groups = new Map<string, { account: Account; folder: Folder; uids: number[] }>();
     for (const meta of metas) {
       const account = store.getAccount(meta.accountId);
       const folder = folderOf(meta.folderId);
       if (!account || account.demo || !folder?.remotePath) continue;
-      try {
-        await imapService.deleteMessages(account, folder, [meta.uid]);
-      } catch (error) {
-        console.warn('[ipc] 删除同步失败', (error as Error).message);
-      }
+      const key = `${account.id}::${folder.id}`;
+      const group = groups.get(key) ?? { account, folder, uids: [] };
+      group.uids.push(meta.uid);
+      groups.set(key, group);
     }
+    await Promise.allSettled(
+      Array.from(groups.values()).map(async (group) => {
+        try {
+          await imapService.deleteMessages(group.account, group.folder, group.uids);
+        } catch (error) {
+          console.warn('[ipc] 删除同步失败', (error as Error).message);
+        }
+      }),
+    );
     return folderViews();
   });
 
@@ -781,11 +793,16 @@ export function registerIpcHandlers(): void {
   /** 确保附件已落盘：本地没有就从服务器重新取一次整封邮件（同时会把附件写下来） */
   async function ensureAttachment(messageId: string, filename: string): Promise<string | null> {
     const direct = store.attachmentPath(messageId, filename);
-    if (fs.existsSync(direct)) return direct;
     const meta = store.getMessageMeta(messageId);
+    const account = meta ? store.getAccount(meta.accountId) : undefined;
+    const folder = meta ? folderOf(meta.folderId) : undefined;
+    // 演示邮箱的 Office 附件首次使用时生成真实文件（占位文本无法预览）
+    if (meta && account?.demo) {
+      const body = store.getMessageBody(meta.accountId, meta.folderId, meta.uid);
+      await materializeDemoAttachment(direct, filename, body?.text?.split('\n').filter(Boolean) ?? []);
+    }
+    if (fs.existsSync(direct)) return direct;
     if (!meta) return null;
-    const account = store.getAccount(meta.accountId);
-    const folder = folderOf(meta.folderId);
     if (account && folder && !account.demo && folder.remotePath) {
       try {
         await loadMessage(messageId);
@@ -851,8 +868,42 @@ export function registerIpcHandlers(): void {
           dataUrl: `data:application/pdf;base64,${fs.readFileSync(file).toString('base64')}`,
         };
       }
-      if (['.txt', '.csv', '.log', '.md', '.json', '.xml', '.htm', '.html'].includes(ext)) {
+      if (['.txt', '.log', '.md', '.json', '.xml', '.htm', '.html'].includes(ext)) {
         return { ok: true, kind: 'text', text: fs.readFileSync(file, 'utf8').slice(0, 200_000) };
+      }
+      if (ext === '.docx') {
+        const mammoth = await import('mammoth');
+        const result = await mammoth.convertToHtml({ path: file });
+        return { ok: true, kind: 'docx', html: result.value.slice(0, 800_000), text: undefined };
+      }
+      if (['.xlsx', '.xls', '.csv'].includes(ext)) {
+        const XLSX = await import('xlsx');
+        const workbook = XLSX.readFile(file, { sheetRows: 400, cellDates: true });
+        const sheets = workbook.SheetNames.slice(0, 5).map((name) => ({
+          name,
+          html: XLSX.utils.sheet_to_html(workbook.Sheets[name], { editable: false }).slice(0, 400_000),
+        }));
+        return { ok: true, kind: 'sheet', sheets, text: `共 ${workbook.SheetNames.length} 个工作表` };
+      }
+      if (ext === '.pptx') {
+        const JSZip = (await import('jszip')).default;
+        const zip = await JSZip.loadAsync(fs.readFileSync(file));
+        const slideFiles = Object.keys(zip.files)
+          .filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+          .sort((a, b) => Number(a.replace(/\D/g, '')) - Number(b.replace(/\D/g, '')))
+          .slice(0, 60);
+        const slides: { index: number; texts: string[] }[] = [];
+        for (const [index, name] of slideFiles.entries()) {
+          const xml = await zip.files[name].async('string');
+          const texts = Array.from(xml.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g))
+            .map((match) => match[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim())
+            .filter(Boolean);
+          slides.push({ index: index + 1, texts });
+        }
+        return { ok: true, kind: 'slides', slides, text: `共 ${slideFiles.length} 页` };
+      }
+      if (ext === '.doc') {
+        return { ok: false, error: '旧版 .doc 格式暂不支持在线预览，可用「打开」或「另存为」后查看' };
       }
       return { ok: true, kind: 'other', size: stat.size };
     } catch (error) {

@@ -199,11 +199,17 @@ export interface AppSystemState extends AppBehaviorSettings {
 export interface AttachmentDataResult {
   ok: boolean;
   error?: string;
-  kind?: 'image' | 'pdf' | 'text' | 'other';
+  kind?: 'image' | 'pdf' | 'text' | 'docx' | 'sheet' | 'slides' | 'other';
   mime?: string;
   dataUrl?: string;
   text?: string;
   size?: number;
+  /** Word（docx）转成的 HTML */
+  html?: string;
+  /** Excel：每个工作表转成 HTML 表格 */
+  sheets?: { name: string; html: string }[];
+  /** PowerPoint：按页抽取的文字 */
+  slides?: { index: number; texts: string[] }[];
 }
 
 export interface AppSettings {

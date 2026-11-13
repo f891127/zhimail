@@ -131,6 +131,49 @@ export function AttachmentPreview({
             </pre>
           )}
 
+          {!state.loading && state.result?.kind === 'docx' && (
+            <div className="mx-auto max-w-[760px] bg-white px-8 py-6 text-[13px] leading-7 text-shell-text [&_h1]:mb-2 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:mb-1.5 [&_h3]:font-semibold [&_li]:ml-5 [&_li]:list-disc [&_p]:my-1.5 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-shell-line [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-shell-line [&_th]:bg-shell-chrome [&_th]:px-2 [&_th]:py-1">
+              <div
+                // 内容来自 mammoth 的 docx→HTML 转换，仅保留排版标签
+                dangerouslySetInnerHTML={{ __html: state.result.html ?? '' }}
+              />
+            </div>
+          )}
+          {!state.loading && state.result?.kind === 'sheet' && (
+            <div className="flex h-full flex-col">
+              {(state.result.sheets ?? []).map((sheet) => (
+                <div key={sheet.name} className="min-h-0 flex-1 overflow-auto border-b border-shell-line last:border-b-0">
+                  <div className="sticky left-0 top-0 z-10 border-b border-shell-line bg-shell-chrome px-3 py-1 text-[11px] font-medium text-shell-sub">
+                    工作表：{sheet.name}
+                  </div>
+                  <div
+                    className="p-2 text-[11px] [&_table]:border-collapse [&_td]:border [&_td]:border-shell-line [&_td]:px-2 [&_td]:py-0.5 [&_td]:align-top [&_td]:whitespace-pre-wrap"
+                    dangerouslySetInnerHTML={{ __html: sheet.html }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          {!state.loading && state.result?.kind === 'slides' && (
+            <div className="mx-auto max-w-[820px] space-y-3 p-4">
+              {(state.result.slides ?? []).map((slide) => (
+                <div key={slide.index} className="rounded border border-shell-line bg-white p-4">
+                  <div className="mb-2 text-[11px] font-medium text-shell-faint">第 {slide.index} 页</div>
+                  {slide.texts.length === 0 ? (
+                    <p className="text-[11px] text-shell-faint">（这一页没有文字，可能是图片或图表）</p>
+                  ) : (
+                    <ul className="space-y-1 text-[12px] leading-6 text-shell-text">
+                      {slide.texts.map((line, index) => (
+                        <li key={index} className={index === 0 ? 'font-semibold' : undefined}>
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
           {!state.loading && state.result?.kind === 'other' && (
             <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center">
               <Icon name="document" size={26} className="text-shell-line" />

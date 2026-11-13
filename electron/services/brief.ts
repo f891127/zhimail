@@ -12,7 +12,7 @@ import { analyzeRange } from './ai/tasks';
 import { createTodoItems } from './todo';
 import { buildDocxBuffer } from './export/docx';
 import { renderHtmlDocument } from './export/markdown';
-import type { Brief, BriefGenerateParams, BriefKind } from './types';
+import type { Brief, BriefGenerateParams, BriefKind, MessageMeta } from './types';
 
 export const BRIEF_ROOT_ID = 'briefs';
 export const BRIEF_GROUPS: { id: string; name: string; kind: BriefKind }[] = [
@@ -68,7 +68,35 @@ export async function generateBrief(
           ? '自定义筛选'
           : '全部邮件';
 
-  const todos = createTodoItems(analysis.todos, {
+  // 为每条待办找回「来源邮件」：按标题/详情与邮件主题+正文的字面重合度打分
+  const candidates = analysis.messageIds
+    .map((messageId) => {
+      const meta = store.getMessageMeta(messageId);
+      if (!meta) return null;
+      const body = store.getMessageBody(meta.accountId, meta.folderId, meta.uid);
+      const text = `${meta.subject} ${body?.text?.slice(0, 1200) ?? ''}`;
+      return { meta, text };
+    })
+    .filter((item): item is { meta: MessageMeta; text: string } => Boolean(item));
+  const pickSource = (draft: { title: string; detail?: string }) => {
+    const query = `${draft.title} ${draft.detail ?? ''}`;
+    let best: { meta: MessageMeta; score: number } | null = null;
+    for (const candidate of candidates) {
+      const score = overlapScore(query, candidate.text);
+      if (!best || score > best.score) best = { meta: candidate.meta, score };
+    }
+    return best && best.score > 0 ? best.meta : candidates[0]?.meta ?? null;
+  };
+  const todos = analysis.todos.map((draft) => {
+    const source = pickSource(draft);
+    return {
+      ...draft,
+      sourceMessageId: draft.sourceMessageId ?? source?.id,
+      sourceSubject: draft.sourceSubject ?? source?.subject,
+      sourceFrom: draft.sourceFrom ?? source?.from?.[0]?.address,
+    };
+  });
+  const createdTodos = createTodoItems(todos, {
     briefId: id,
     sourceSubject: title,
   });
@@ -84,7 +112,7 @@ export async function generateBrief(
     model: analysis.model,
     scopeLabel: scopeText,
     messageCount: analysis.stats.total,
-    todoCount: todos.length,
+    todoCount: createdTodos.length,
     markdown: analysis.markdown,
     stats: analysis.stats,
     messageIds: analysis.messageIds,
@@ -147,4 +175,25 @@ export async function exportBrief(id: string, format: 'md' | 'html' | 'docx'): P
   const buffer = await buildDocxBuffer({ title: brief.title, meta, markdown: brief.markdown });
   fs.writeFileSync(filePath, buffer);
   return { path: filePath, filename, format };
+}
+
+/** 粗粒度重合度：中文按二元字组、英文按词，用于给待办找最可能的来源邮件 */
+function overlapScore(query: string, text: string): number {
+  if (!query || !text) return 0;
+  const normalize = (input: string) => input.replace(/\s+/g, '');
+  const q = normalize(query);
+  const t = normalize(text);
+  let score = 0;
+  const seen = new Set<string>();
+  for (let i = 0; i < q.length - 1; i += 1) {
+    const gram = q.slice(i, i + 2);
+    if (!/[\u4e00-\u9fa5]/.test(gram)) continue;
+    if (seen.has(gram)) continue;
+    seen.add(gram);
+    if (t.includes(gram)) score += 1;
+  }
+  for (const word of query.toLowerCase().match(/[a-z0-9]{4,}/g) ?? []) {
+    if (text.toLowerCase().includes(word)) score += 2;
+  }
+  return score;
 }

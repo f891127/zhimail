@@ -43,14 +43,18 @@ export function TodoPanel() {
     });
   }, [todos, filter]);
 
-  const openSource = (todoId: string, messageId?: string, folderId?: string) => {
+  const openSource = (todoId: string, messageId?: string) => {
     if (!messageId) {
-      store.pushToast({ type: 'info', title: '这条待办没有关联的来源邮件' });
+      store.pushToast({
+        type: 'info',
+        title: '这条待办没有关联的来源邮件',
+        message: '较早生成的待办未记录来源，可在简报中查看对应内容',
+      });
       return;
     }
-    if (folderId) void store.selectFolder(folderId);
-    void store.selectMessage(messageId);
-    store.setView('mail');
+    void store.openMessageById(messageId).then((ok) => {
+      if (!ok) store.pushToast({ type: 'error', title: '打不开来源邮件', message: messageId });
+    });
     void todoId;
   };
 
@@ -174,7 +178,7 @@ export function TodoPanel() {
                     <button
                       type="button"
                       className="flex max-w-[320px] items-center gap-0.5 truncate text-brand-600 hover:underline"
-                      onClick={() => openSource(todo.id, todo.sourceMessageId, todo.sourceFolderId)}
+                      onClick={() => openSource(todo.id, todo.sourceMessageId)}
                       title={todo.sourceSubject}
                     >
                       <Icon name="mail" size={10} />

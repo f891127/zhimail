@@ -4,6 +4,7 @@
  */
 
 import fs from 'node:fs';
+import path from 'node:path';
 import { store } from './store';
 import { assignThreadIds } from './thread';
 import { ensureDefaultFolders, folderIdFor } from './accounts';
@@ -704,4 +705,54 @@ export function seedDemoData(force = false): { seeded: boolean } {
 
   store.updateSettings({ bootstrapped: true });
   return { seeded: true };
+}
+
+/** 演示用：把正文写进一个真实的 docx 文件 */
+async function buildDemoDocx(title: string, lines: string[]): Promise<Buffer> {
+  const { Document, Packer, Paragraph, HeadingLevel, TextRun } = await import('docx');
+  const doc = new Document({
+    sections: [
+      {
+        children: [
+          new Paragraph({ text: title.replace(/\.docx$/i, ''), heading: HeadingLevel.HEADING_1 }),
+          new Paragraph({
+            children: [new TextRun({ text: '本文档由知邮 ZhiMail 演示数据自动生成，用于验证 Word 附件预览。', italics: true })],
+          }),
+          ...lines.map((line) => new Paragraph({ text: line })),
+        ],
+      },
+    ],
+  });
+  return Packer.toBuffer(doc);
+}
+
+/** 演示用：生成一个真实的两行两列的 xlsx 文件 */
+async function buildDemoXlsx(filename: string): Promise<Buffer> {
+  const XLSX = await import('xlsx');
+  const rows = [
+    ['项目', '数量', '负责人', '截止日期'],
+    ['压力蒸汽灭菌器 XG1 系列', 12, '周靖航', '2026-11-30'],
+    ['真空泵更换件', 6, '陈志强', '2026-11-20'],
+  ];
+  const book = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet(rows);
+  XLSX.utils.book_append_sheet(book, sheet, filename.replace(/\.xlsx$/i, ''));
+  return XLSX.write(book, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+}
+
+/**
+ * 演示邮箱的 docx/xlsx 附件在首次打开时按需生成真实文件，
+ * 这样「在线预览 / 打开 / 另存为」都能得到可用的 Office 文件。
+ */
+export async function materializeDemoAttachment(filePath: string, filename: string, body: string[]): Promise<boolean> {
+  const lower = filename.toLowerCase();
+  if (!lower.endsWith('.docx') && !lower.endsWith('.xlsx')) return false;
+  if (fs.existsSync(filePath) && fs.statSync(filePath).size > 4096) {
+    const head = fs.readFileSync(filePath, { encoding: 'latin1' }).slice(0, 2);
+    if (head === 'PK') return true;
+  }
+  const buffer = lower.endsWith('.docx') ? await buildDemoDocx(filename, body) : await buildDemoXlsx(filename);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, buffer);
+  return true;
 }
