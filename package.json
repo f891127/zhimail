@@ -1,7 +1,7 @@
 {
   "name": "zhimail",
   "productName": "ZhiMail",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "private": true,
   "description": "知邮 ZhiMail —— Foxmail 风格桌面邮件客户端，内置 AI 汇总、邮件简报与待办提取能力",
   "author": {

@@ -63,15 +63,15 @@
   }
 
   .tool-btn {
-    @apply inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs text-shell-text transition-colors duration-120 hover:bg-black/[0.06] active:bg-black/10 disabled:cursor-not-allowed disabled:opacity-40;
+    @apply inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded px-2.5 py-1.5 text-xs text-shell-text transition-colors duration-120 hover:bg-black/[0.06] active:bg-black/10 disabled:cursor-not-allowed disabled:opacity-40;
   }
 
   .primary-btn {
-    @apply inline-flex items-center gap-1.5 rounded bg-brand-500 px-3 py-1.5 text-xs font-medium text-white transition-colors duration-120 hover:bg-brand-600 active:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded bg-brand-500 px-3 py-1.5 text-xs font-medium text-white transition-colors duration-120 hover:bg-brand-600 active:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .ghost-btn {
-    @apply inline-flex items-center gap-1.5 rounded border border-shell-line bg-white px-2.5 py-1.5 text-xs text-shell-text transition-colors duration-120 hover:border-brand-300 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded border border-shell-line bg-white px-2.5 py-1.5 text-xs text-shell-text transition-colors duration-120 hover:border-brand-300 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .field {
