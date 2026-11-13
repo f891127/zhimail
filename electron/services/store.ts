@@ -64,6 +64,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
       'todos',
     ],
     readerActionLimit: 7,
+    skin: 'default',
   },
   backup: {
     autoEnabled: false,

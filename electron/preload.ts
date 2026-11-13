@@ -19,6 +19,7 @@ const api = {
   app: {
     info: () => invoke('app/info'),
     chooseDataDir: () => invoke('app/chooseDataDir'),
+    dataSize: () => invoke('app/dataSize'),
     resetDataDir: () => invoke('app/resetDataDir'),
     relaunch: () => invoke('app/relaunch'),
     system: () => invoke('app/system'),

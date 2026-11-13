@@ -156,7 +156,7 @@ interface State {
   clearSearch: () => Promise<void>;
 
   syncNow: (accountId?: string) => Promise<void>;
-  saveAccount: (input: AccountInput) => Promise<void>;
+  saveAccount: (input: AccountInput) => Promise<string | undefined>;
   removeAccount: (id: string) => Promise<void>;
   testAccount: (input: AccountInput) => Promise<{ imap: { ok: boolean; message: string }; smtp: { ok: boolean; message: string } }>;
   updateSettings: (patch: Record<string, unknown>) => Promise<void>;
@@ -175,6 +175,12 @@ interface State {
   setAIOutput: <K extends keyof AIOutputs>(key: K, value: AIOutputs[K]) => void;
   setTranslationVisible: (visible: boolean) => void;
   checkUpdate: () => Promise<void>;
+  /** 更新弹窗（帮助 → 检查更新 / 自动发现新版本时弹出） */
+  updateDialogOpen: boolean;
+  openUpdateDialog: () => void;
+  closeUpdateDialog: () => void;
+  /** 一键收取全部真实账户 */
+  syncAll: () => Promise<void>;
   downloadUpdate: () => Promise<void>;
   installUpdate: () => Promise<void>;
   openDownloadedInstaller: () => Promise<void>;
@@ -290,6 +296,7 @@ export const useAppStore = create<State>((set, get) => ({
   aiOutputs: emptyOutputs,
   translationVisible: false,
   updateState: null,
+  updateDialogOpen: false,
 
   analysisParams: defaultRange(),
 
@@ -400,7 +407,14 @@ export const useAppStore = create<State>((set, get) => ({
       void get().reloadFolders();
       void get().loadMessages();
     });
-    api.on('update:status', (payload) => set({ updateState: payload as UpdateState }));
+    api.on('update:status', (payload) => {
+      const state = payload as UpdateState;
+      set({
+        updateState: state,
+        // 发现新版本或下载完成时直接把弹窗推到最前面，不用用户再去菜单里找
+        updateDialogOpen: state.phase === 'available' || state.phase === 'downloaded' ? true : get().updateDialogOpen,
+      });
+    });
     void api.update.state().then((state) => set({ updateState: state }));
 
     // 截图与调试钩子
@@ -422,6 +436,14 @@ export const useAppStore = create<State>((set, get) => ({
         if (first) set({ selectedBriefId: first.id });
       },
       showTodos: () => set({ view: 'todos', aiPanelOpen: false }),
+      showUpdateDialog: () => {
+        set({ updateDialogOpen: true });
+        void get().checkUpdate();
+      },
+      /** 截图用：切到指定皮肤（直接改 <html data-skin>，不写设置） */
+      setSkin: (id: string) => {
+        void import('@/lib/skin').then((mod) => mod.lockSkin(id));
+      },
       showSettings: (tab?: string) =>
         set({ settingsOpen: true, settingsTab: (tab as State['settingsTab']) ?? 'ai' }),
       maximizeAIPanel: () => set({ aiPanelOpen: true, aiPanelMaximized: true }),
@@ -652,6 +674,8 @@ export const useAppStore = create<State>((set, get) => ({
     set({ accounts });
     await get().reloadFolders();
     get().pushToast({ type: 'success', title: '账户已保存', message: input.email });
+    // 返回账户 id，便于调用方新建账户后立即收取一次
+    return accounts.find((account) => account.email === input.email)?.id ?? input.id;
   },
 
   removeAccount: async (id) => {
@@ -917,6 +941,18 @@ export const useAppStore = create<State>((set, get) => ({
 
   setTranslationVisible: (visible) => set({ translationVisible: visible }),
 
+  openUpdateDialog: () => set({ updateDialogOpen: true }),
+  closeUpdateDialog: () => set({ updateDialogOpen: false }),
+  syncAll: async () => {
+    const accounts = get().accounts.filter((account) => !account.demo);
+    if (!accounts.length) {
+      get().pushToast({ type: 'error', title: '没有可收取的账户', message: '请先在设置中添加邮箱账户' });
+      return;
+    }
+    for (const account of accounts) {
+      await get().syncNow(account.id);
+    }
+  },
   checkUpdate: async () => {
     const state = await api.update.check();
     set({ updateState: state });

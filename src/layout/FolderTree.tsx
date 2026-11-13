@@ -193,7 +193,7 @@ export function FolderTree() {
   const briefGroups = folders.filter((folder) => folder.parentId === 'briefs');
 
   return (
-    <div className="flex h-full w-full flex-col bg-shell-bg">
+    <div className="flex h-full w-full flex-col bg-shell-chrome">
       <div className="scroll-area flex-1 py-1.5">
         {commonRoot && (
           <div className="mb-1 border-b border-shell-lineSoft pb-1">
@@ -256,6 +256,12 @@ export function FolderTree() {
             <div key={account.id} className="mb-1">
               <div
                 className="group flex h-[28px] items-center gap-1.5 px-1.5"
+                onDoubleClick={(event) => {
+                  // 双击账户名展开 / 收起该账户的文件夹（参考 Foxmail）
+                  event.preventDefault();
+                  toggleAccount(account.id);
+                }}
+                title={`${account.email}（双击展开/收起）`}
                 onContextMenu={(event) => {
                   event.preventDefault();
                   setAccountMenu({

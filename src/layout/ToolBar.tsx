@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { Icon } from '@/components/Icon';
+import { SkinPicker } from '@/components/SkinPicker';
 import { ZH_LABEL_KEYS } from '@/lib/i18n';
 import { useT } from '@/lib/useT';
 
@@ -22,6 +23,7 @@ export function ToolBar() {
     deleteMessages,
     toggleFlag,
     syncNow,
+    syncAll,
     search,
     clearSearch,
     setAIPanel,
@@ -45,6 +47,15 @@ export function ToolBar() {
       <button type="button" className="primary-btn shrink-0" onClick={() => openCompose()}>
         <Icon name="compose" size={14} />
         写邮件
+      </button>
+      <button
+        type="button"
+        className="tool-btn shrink-0 border border-shell-line"
+        title={realAccount ? '收取全部账户的邮件（F5）' : '演示邮箱无需收取'}
+        onClick={() => void syncAll()}
+      >
+        <Icon name="refresh" size={14} className="text-brand-600" />
+        <span>收取</span>
       </button>
 
       {/* 中间弹性留白，把搜索与操作推到右侧 */}
@@ -175,6 +186,7 @@ export function ToolBar() {
           <Icon name="sparkles" size={15} className={aiBusy ? 'animate-pulse-soft text-brand-500' : 'text-brand-500'} />
           <span>{tt('AI 助手')}</span>
         </button>
+        <SkinPicker />
         <button type="button" className="tool-btn" onClick={() => openSettings('ai')} title="设置">
           <Icon name="settings" size={15} />
           <span>设置</span>

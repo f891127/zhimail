@@ -48,7 +48,8 @@ export type IconName =
   | 'filter'
   | 'undo'
   | 'info'
-  | 'tag';
+  | 'tag'
+  | 'palette';
 
 const PATHS: Record<IconName, JSX.Element> = {
   mail: (
@@ -203,6 +204,14 @@ const PATHS: Record<IconName, JSX.Element> = {
   'chevron-right': <path d="M9.5 6l6 6-6 6" />,
   close: <path d="M6 6l12 12M18 6L6 18" />,
   plus: <path d="M12 5v14M5 12h14" />,
+  palette: (
+    <>
+      <path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.9-.8 1.9-1.8 0-.9-.6-1.5-.6-2.3 0-.8.7-1.4 1.6-1.4h1.6c2 0 3.5-1.6 3.5-3.7 0-4-3.8-7.3-8-7.3Z" />
+      <circle cx="8" cy="10" r="1.1" />
+      <circle cx="11.5" cy="7.6" r="1.1" />
+      <circle cx="15.4" cy="9.2" r="1.1" />
+    </>
+  ),
   download: (
     <>
       <path d="M12 3.5v11" />

@@ -126,7 +126,58 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
     .filter(Boolean);
 
   const views: { name: string; script: string; waitMs?: number }[] = [
+    {
+      name: '01b-skin-gmail',
+      script: `(() => {
+        let tries = 0;
+        const tick = () => {
+          if (window.__zhimailDev?.setSkin) {
+            window.__zhimailDev.showMail?.();
+            window.__zhimailDev.setSkin('gmail');
+            return;
+          }
+          if (tries++ < 60) setTimeout(tick, 100);
+        };
+        tick();
+        return true;
+      })()`,
+      waitMs: 2200,
+    },
+    {
+      name: '01c-skin-notion',
+      script: `(() => {
+        window.__zhimailDev?.setSkin?.('notion');
+        return true;
+      })()`,
+      waitMs: 1400,
+    },
+    {
+      name: '01d-skin-picker',
+      script: `(() => {
+        window.__zhimailDev?.setSkin?.('default');
+        const btn = Array.from(document.querySelectorAll('button')).find((b) => (b.textContent || '').trim() === '皮肤');
+        if (btn) btn.click();
+        return Boolean(btn);
+      })()`,
+      waitMs: 1000,
+    },
     { name: '01-mail', script: 'window.__zhimailDev?.showMail?.()' },
+    {
+      name: '07-update-dialog',
+      script: `(() => {
+        let tries = 0;
+        const tick = () => {
+          if (window.__zhimailDev?.showUpdateDialog) {
+            window.__zhimailDev.showUpdateDialog();
+            return;
+          }
+          if (tries++ < 60) setTimeout(tick, 100);
+        };
+        tick();
+        return true;
+      })()`,
+      waitMs: 1800,
+    },
     { name: '02-ai-panel', script: 'window.__zhimailDev?.showAI?.()' },
     {
       name: '02b-analysis',

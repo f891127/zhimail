@@ -39,6 +39,7 @@ const emptySettings: AppSettings = {
     pageSize: 200,
     readerActions: [],
     readerActionLimit: 7,
+    skin: 'default',
   },
   app: {
     autoLaunch: false,
@@ -98,6 +99,7 @@ const mockApi: ZhimailApi = {
   app: {
     info: async () => emptyInfo,
     chooseDataDir: async () => ({ canceled: true }),
+    dataSize: async () => ({ dataDir: '浏览器预览模式（无本地数据）', bytes: 0, files: 0 }),
     resetDataDir: async () => ({ dataDir: emptyInfo.dataDir }),
     relaunch: async () => false,
     system: async () => mockSystemState(),

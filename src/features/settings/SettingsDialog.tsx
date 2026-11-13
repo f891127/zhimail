@@ -1,5 +1,6 @@
 /** 设置：邮箱账户、AI 模型接入、自动简报、关于与快捷键 */
 
+import { SKINS } from '@/lib/skin';
 import { useEffect, useState } from 'react';
 import { SystemSettingsPage } from '@/features/settings/SystemSettingsPage';
 import { useAppStore } from '@/store/useAppStore';
@@ -19,6 +20,15 @@ import {
 type TabId = 'account' | 'ai' | 'ui' | 'brief' | 'data' | 'update' | 'about' | 'app';
 
 /** 常用 GitHub 加速镜像：均为第三方服务，仅作为快捷填入 */
+
+/** 字节数转可读容量 */
+function formatBytes(bytes: number): string {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
 
 /** 更新源展示文案：能识别常见镜像，否则显示主机名 */
 function describeSource(url: string): string {
@@ -237,6 +247,23 @@ export function SettingsDialog() {
     await saveUpdateSource({ source: 'custom', customUrl: mirror.url }, `已切换到镜像 ${mirror.label}`);
   };
 
+  // 数据目录占用
+  const [dataSize, setDataSize] = useState<{ bytes: number; files: number } | null>(null);
+  const [sizeLoading, setSizeLoading] = useState(false);
+  const loadDataSize = async () => {
+    setSizeLoading(true);
+    try {
+      const result = await api.app.dataSize();
+      setDataSize({ bytes: result.bytes, files: result.files });
+    } finally {
+      setSizeLoading(false);
+    }
+  };
+  const activeTab = store.settingsTab;
+  useEffect(() => {
+    if (store.settingsOpen && activeTab === 'data') void loadDataSize();
+  }, [store.settingsOpen, activeTab]);
+
   // 数据存储位置
   const changeDataDir = async () => {
     const result = await api.app.chooseDataDir();
@@ -350,9 +377,16 @@ export function SettingsDialog() {
       store.pushToast({ type: 'error', title: '请填写邮箱地址与服务器地址' });
       return;
     }
-    await store.saveAccount(buildInput());
+    const isNew = !form.id;
+    const saved = await store.saveAccount(buildInput());
     setForm(emptyForm);
     setTestResult(null);
+    if (isNew) {
+      // 新建账户后立刻收取一次，免得用户还要手动点同步
+      const accountId = saved ?? store.accounts.find((item) => item.email === form.email.trim())?.id;
+      store.pushToast({ type: 'info', title: '账户已保存', message: '正在收取该账户的邮件…' });
+      if (accountId) void store.syncNow(accountId);
+    }
   };
 
   const editAccount = (id: string) => {
@@ -1174,6 +1208,38 @@ export function SettingsDialog() {
 
             {tab === 'ui' && settings && (
               <div className="space-y-3">
+                <div>
+                  <div className="mb-1 text-[11px] font-semibold text-shell-sub">界面皮肤</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {SKINS.map((skin) => {
+                      const active = (settings.ui?.skin ?? 'default') === skin.id;
+                      return (
+                        <button
+                          key={skin.id}
+                          type="button"
+                          className={`flex items-center gap-1.5 rounded border px-2 py-1 text-[11px] transition-colors duration-120 ${
+                            active
+                              ? 'border-brand-400 bg-brand-50 text-brand-700'
+                              : 'border-shell-line text-shell-sub hover:border-brand-200 hover:bg-black/[0.02]'
+                          }`}
+                          onClick={() => void store.updateSettings({ ui: { ...(settings.ui ?? {}), skin: skin.id } } as never)}
+                        >
+                          <span className="flex overflow-hidden rounded-sm border border-black/10">
+                            {skin.swatch.map((color, index) => (
+                              <span key={color} style={{ background: color, width: index === 2 ? 12 : 7, height: 16 }} />
+                            ))}
+                          </span>
+                          {skin.name}
+                          {active && <Icon name="check" size={10} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-1 text-[10px] leading-4 text-shell-faint">
+                    皮肤会立即生效并自动保存；也可以在工具栏右上角的「皮肤」按钮里切换。
+                  </p>
+                </div>
+
                 <div className="text-[11px] leading-5 text-shell-sub">
                   勾选后这些操作会出现在阅读窗格邮件标题下方的操作条上，勾选顺序即展示顺序；未勾选的操作不会显示。
                   超过上限（默认 7 个）的部分收进「更多」菜单，与「工具」菜单中的功能一一对应。
@@ -1281,6 +1347,22 @@ export function SettingsDialog() {
                     </div>
                     <div className="text-shell-faint">
                       邮件、附件、简报、待办与全部设置都保存在这里；更改位置会把现有数据复制过去，重启后生效，原目录内容保留。
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 border-t border-shell-lineSoft pt-1.5">
+                      <span className="text-shell-sub">
+                        已占用：
+                        <span className="font-medium tabular-nums text-shell-text">
+                          {dataSize ? formatBytes(dataSize.bytes) : '统计中…'}
+                        </span>
+                      </span>
+                      {dataSize && <span className="text-shell-faint">{dataSize.files} 个文件</span>}
+                      <button
+                        type="button"
+                        className="ml-auto text-[11px] text-brand-600 hover:underline"
+                        onClick={() => void loadDataSize()}
+                      >
+                        {sizeLoading ? '统计中…' : '刷新'}
+                      </button>
                     </div>
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
                       <button type="button" className="ghost-btn" onClick={() => void changeDataDir()}>

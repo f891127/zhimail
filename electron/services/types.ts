@@ -359,6 +359,8 @@ export interface UISettings {
   readerActions: string[];
   /** 阅读窗格操作条最多显示项数 */
   readerActionLimit: number;
+  /** 皮肤 id：default / gmail / outlook / foxmail / filo / notion / neat */
+  skin: string;
 }
 
 /** 备份设置 */

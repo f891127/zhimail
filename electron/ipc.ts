@@ -272,6 +272,36 @@ export function registerIpcHandlers(): void {
     aiProviders: AI_PROVIDERS,
   }));
 
+  /** 统计数据目录占用：文件数与字节数（邮件正文、附件、简报都在里面） */
+  ipcMain.handle('app/dataSize', () => {
+    const root = store.root;
+    let bytes = 0;
+    let files = 0;
+    const walk = (dir: string) => {
+      let entries: fs.Dirent[] = [];
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+        } else if (entry.isFile()) {
+          try {
+            bytes += fs.statSync(full).size;
+            files += 1;
+          } catch {
+            /* 忽略无法读取的文件 */
+          }
+        }
+      }
+    };
+    walk(root);
+    return { dataDir: root, bytes, files };
+  });
+
   /* ------------------------------ 账户 ------------------------------ */
 
   ipcMain.handle('accounts/list', () => listAccounts());

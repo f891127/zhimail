@@ -40,11 +40,21 @@ export function MenuBar() {
   } = store;
 
   useEffect(() => {
+    const close = () => setOpenMenu(null);
     const handleClick = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) setOpenMenu(null);
+      if (!containerRef.current?.contains(event.target as Node)) close();
     };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    document.addEventListener('mousedown', handleClick, true);
+    // 点击邮件正文 iframe 时父窗口收不到 mousedown，靠失焦事件兜底关闭菜单
+    window.addEventListener('blur', close);
+    window.addEventListener('resize', close);
+    document.addEventListener('scroll', close, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClick, true);
+      window.removeEventListener('blur', close);
+      window.removeEventListener('resize', close);
+      document.removeEventListener('scroll', close, true);
+    };
   }, []);
 
   const menus: Record<string, MenuItem[]> = {
@@ -145,7 +155,13 @@ export function MenuBar() {
       { label: tt('设置…'), onClick: () => openSettings('account') },
     ],
     帮助: [
-      { label: tt('检查更新…'), onClick: () => void store.checkUpdate() },
+      {
+        label: tt('检查更新…'),
+        onClick: () => {
+          store.openUpdateDialog();
+          void store.checkUpdate();
+        },
+      },
       { label: tt('版本更新日志'), onClick: () => store.openChangelog() },
       { divider: true, label: tt('') },
       { label: tt('使用说明'), onClick: () => openSettings('about') },

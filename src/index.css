@@ -2,6 +2,177 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============ 皮肤主题变量（默认 = 知邮蓝） ============ */
+/* 知邮蓝 */
+:root {
+    --c-brand-50: 237 243 251;
+    --c-brand-100: 215 229 247;
+    --c-brand-200: 170 200 237;
+    --c-brand-300: 121 169 227;
+    --c-brand-400: 71 137 216;
+    --c-brand-500: 31 111 208;
+    --c-brand-600: 27 95 179;
+    --c-brand-700: 22 80 150;
+    --c-brand-800: 18 64 121;
+    --c-brand-900: 14 49 92;
+    --c-accent-400: 236 111 66;
+    --c-accent-500: 232 84 30;
+    --c-accent-600: 195 71 25;
+    --c-shell-bg: 245 246 247;
+    --c-shell-panel: 255 255 255;
+    --c-shell-chrome: 238 240 242;
+    --c-shell-line: 217 221 226;
+    --c-shell-lineSoft: 232 235 238;
+    --c-shell-text: 31 35 41;
+    --c-shell-sub: 95 103 114;
+    --c-shell-faint: 141 149 159;
+}
+/* Gmail */
+html[data-skin="gmail"] {
+    --c-brand-50: 237 244 253;
+    --c-brand-100: 214 230 251;
+    --c-brand-200: 168 202 246;
+    --c-brand-300: 118 171 241;
+    --c-brand-400: 67 140 236;
+    --c-brand-500: 26 115 232;
+    --c-brand-600: 22 99 200;
+    --c-brand-700: 19 83 167;
+    --c-brand-800: 15 67 135;
+    --c-brand-900: 11 51 102;
+    --c-accent-400: 237 97 85;
+    --c-accent-500: 234 67 53;
+    --c-accent-600: 197 56 45;
+    --c-shell-bg: 246 248 252;
+    --c-shell-panel: 255 255 255;
+    --c-shell-chrome: 230 240 254;
+    --c-shell-line: 210 227 252;
+    --c-shell-lineSoft: 232 240 254;
+    --c-shell-text: 32 33 36;
+    --c-shell-sub: 95 99 104;
+    --c-shell-faint: 128 134 139;
+}
+/* Outlook */
+html[data-skin="outlook"] {
+    --c-brand-50: 236 243 250;
+    --c-brand-100: 212 229 243;
+    --c-brand-200: 164 199 230;
+    --c-brand-300: 111 167 215;
+    --c-brand-400: 58 134 201;
+    --c-brand-500: 15 108 189;
+    --c-brand-600: 13 93 163;
+    --c-brand-700: 11 78 136;
+    --c-brand-800: 9 63 110;
+    --c-brand-900: 7 48 83;
+    --c-accent-400: 216 84 88;
+    --c-accent-500: 209 52 56;
+    --c-accent-600: 176 44 47;
+    --c-shell-bg: 250 249 248;
+    --c-shell-panel: 255 255 255;
+    --c-shell-chrome: 234 232 230;
+    --c-shell-line: 210 208 206;
+    --c-shell-lineSoft: 237 235 233;
+    --c-shell-text: 32 31 30;
+    --c-shell-sub: 96 94 92;
+    --c-shell-faint: 138 136 134;
+}
+/* Foxmail */
+html[data-skin="foxmail"] {
+    --c-brand-50: 237 243 250;
+    --c-brand-100: 214 229 244;
+    --c-brand-200: 168 200 232;
+    --c-brand-300: 118 168 218;
+    --c-brand-400: 68 136 205;
+    --c-brand-500: 27 110 194;
+    --c-brand-600: 23 95 167;
+    --c-brand-700: 19 79 140;
+    --c-brand-800: 16 64 113;
+    --c-brand-900: 12 48 85;
+    --c-accent-400: 242 151 41;
+    --c-accent-500: 240 131 0;
+    --c-accent-600: 202 110 0;
+    --c-shell-bg: 238 241 244;
+    --c-shell-panel: 255 255 255;
+    --c-shell-chrome: 221 228 234;
+    --c-shell-line: 195 204 213;
+    --c-shell-lineSoft: 224 230 235;
+    --c-shell-text: 35 40 45;
+    --c-shell-sub: 85 96 107;
+    --c-shell-faint: 138 148 158;
+}
+/* Filo Mail */
+html[data-skin="filo"] {
+    --c-brand-50: 243 242 253;
+    --c-brand-100: 229 226 251;
+    --c-brand-200: 199 193 246;
+    --c-brand-300: 167 157 241;
+    --c-brand-400: 134 121 235;
+    --c-brand-500: 108 92 231;
+    --c-brand-600: 93 79 199;
+    --c-brand-700: 78 66 166;
+    --c-brand-800: 63 53 134;
+    --c-brand-900: 48 40 102;
+    --c-accent-400: 255 131 149;
+    --c-accent-500: 255 107 129;
+    --c-accent-600: 214 90 108;
+    --c-shell-bg: 247 245 255;
+    --c-shell-panel: 255 255 255;
+    --c-shell-chrome: 233 226 255;
+    --c-shell-line: 213 201 245;
+    --c-shell-lineSoft: 236 231 251;
+    --c-shell-text: 43 37 64;
+    --c-shell-sub: 106 98 133;
+    --c-shell-faint: 152 145 176;
+}
+/* Notion Mail */
+html[data-skin="notion"] {
+    --c-brand-50: 239 239 238;
+    --c-brand-100: 219 219 218;
+    --c-brand-200: 179 178 176;
+    --c-brand-300: 135 134 130;
+    --c-brand-400: 91 89 84;
+    --c-brand-500: 55 53 47;
+    --c-brand-600: 47 46 40;
+    --c-brand-700: 40 38 34;
+    --c-brand-800: 32 31 27;
+    --c-brand-900: 24 23 21;
+    --c-accent-400: 70 151 231;
+    --c-accent-500: 35 131 226;
+    --c-accent-600: 29 110 190;
+    --c-shell-bg: 251 251 250;
+    --c-shell-panel: 255 255 255;
+    --c-shell-chrome: 241 241 239;
+    --c-shell-line: 222 220 215;
+    --c-shell-lineSoft: 238 237 234;
+    --c-shell-text: 55 53 47;
+    --c-shell-sub: 107 106 101;
+    --c-shell-faint: 155 154 151;
+}
+/* Neat Mail AI */
+html[data-skin="neat"] {
+    --c-brand-50: 236 247 244;
+    --c-brand-100: 212 237 230;
+    --c-brand-200: 164 218 203;
+    --c-brand-300: 111 196 173;
+    --c-brand-400: 58 175 143;
+    --c-brand-500: 15 157 118;
+    --c-brand-600: 13 135 101;
+    --c-brand-700: 11 113 85;
+    --c-brand-800: 9 91 68;
+    --c-brand-900: 7 69 52;
+    --c-accent-400: 247 179 71;
+    --c-accent-500: 245 165 36;
+    --c-accent-600: 206 139 30;
+    --c-shell-bg: 244 249 247;
+    --c-shell-panel: 255 255 255;
+    --c-shell-chrome: 220 240 232;
+    --c-shell-line: 198 226 215;
+    --c-shell-lineSoft: 231 241 236;
+    --c-shell-text: 22 48 42;
+    --c-shell-sub: 77 107 98;
+    --c-shell-faint: 138 167 157;
+}
+
+
 @layer base {
   html,
   body,

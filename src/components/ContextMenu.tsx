@@ -43,10 +43,15 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
     window.addEventListener('mousedown', handleDown);
     window.addEventListener('keydown', handleKey);
     window.addEventListener('resize', onClose);
+    // 点进邮件正文 iframe 或切走窗口时也要关闭
+    window.addEventListener('blur', onClose);
+    document.addEventListener('scroll', onClose, true);
     return () => {
       window.removeEventListener('mousedown', handleDown);
       window.removeEventListener('keydown', handleKey);
       window.removeEventListener('resize', onClose);
+      window.removeEventListener('blur', onClose);
+      document.removeEventListener('scroll', onClose, true);
     };
   }, [onClose]);
 

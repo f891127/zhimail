@@ -20,7 +20,7 @@ import type { MessageMeta } from '@/types/zhimail';
 function EmptyReading() {
   const store = useAppStore();
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 bg-white px-10 text-center">
+    <div className="flex h-full flex-col items-center justify-center gap-3 bg-shell-bg px-10 text-center">
       <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100 text-brand-500">
         <Icon name="mail" size={30} strokeWidth={1.3} />
       </div>
@@ -117,7 +117,7 @@ export function ReadingPane() {
 
 
   return (
-    <div className="flex h-full min-w-0 flex-col bg-white">
+    <div className="flex h-full min-w-0 flex-col bg-shell-bg">
       {/* 主题与操作 */}
       <div className="shrink-0 border-b border-shell-line px-4 pt-3">
         <div className="flex items-start gap-3">

@@ -17,6 +17,8 @@ import { ChangelogDialog } from '@/features/changelog/ChangelogDialog';
 import { LAST_SEEN_VERSION_KEY } from '@/lib/changelog';
 import { ToastHost } from '@/components/ToastHost';
 import { UpdateInstallingOverlay } from '@/components/UpdateInstallingOverlay';
+import { UpdateDialog } from '@/components/UpdateDialog';
+import { applySkin } from '@/lib/skin';
 
 function Splitter({ onDrag }: { onDrag: (deltaX: number) => void }) {
   const dragging = useRef(false);
@@ -57,6 +59,12 @@ function Splitter({ onDrag }: { onDrag: (deltaX: number) => void }) {
 }
 
 export default function App() {
+  // 皮肤：设置变化时立即应用（写入 <html data-skin>）
+  const skinSetting = useAppStore((state) => state.settings?.ui?.skin);
+  useEffect(() => {
+    applySkin(skinSetting);
+  }, [skinSetting]);
+
   const store = useAppStore();
   const { ready, view, settings, aiPanelOpen, aiPanelMaximized, init } = store;
   const [folderWidth, setFolderWidth] = useState(212);
@@ -184,7 +192,10 @@ export default function App() {
         {/* AI 助手最大化时，其余区域暂时隐藏，只保留 AI 面板 */}
         {!aiPanelMaximized && (
           <>
-            <div className="shrink-0 overflow-hidden" style={{ width: folderWidth }}>
+            <div
+              className="shrink-0 overflow-hidden border-r border-shell-line shadow-[inset_-1px_0_0_rgba(255,255,255,0.6)]"
+              style={{ width: folderWidth }}
+            >
               <FolderTree />
             </div>
             <Splitter
@@ -194,7 +205,10 @@ export default function App() {
             <div className="relative flex min-w-0 flex-1">
               {view === 'mail' && (
                 <>
-                  <div className="shrink-0 overflow-hidden" style={{ width: readingPane ? listWidth : undefined }}>
+                  <div
+                    className="shrink-0 overflow-hidden border-r border-shell-line"
+                    style={{ width: readingPane ? listWidth : undefined }}
+                  >
                     <MessageList />
                   </div>
                   {readingPane && (
@@ -202,7 +216,7 @@ export default function App() {
                       <Splitter
                         onDrag={(delta) => setListWidth((width) => Math.min(560, Math.max(260, width + delta)))}
                       />
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1 bg-shell-bg">
                         <ReadingPane />
                       </div>
                     </>
@@ -220,6 +234,7 @@ export default function App() {
 
       <StatusBar />
 
+      <UpdateDialog />
       <UpdateInstallingOverlay />
       <ComposeWindow />
       <SettingsDialog />

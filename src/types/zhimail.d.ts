@@ -218,6 +218,8 @@ export interface AppSettings {
     readerActions: string[];
     /** 操作条最多显示几项，超出的收进「更多」 */
     readerActionLimit: number;
+    /** 皮肤 id */
+    skin: string;
   };
   backup: {
     autoEnabled: boolean;
@@ -431,6 +433,7 @@ export interface ZhimailApi {
       bytes?: number;
       error?: string;
     }>;
+    dataSize: () => Promise<{ dataDir: string; bytes: number; files: number }>;
     resetDataDir: () => Promise<{ dataDir: string }>;
     relaunch: () => Promise<boolean>;
     system: () => Promise<AppSystemState>;
@@ -588,6 +591,8 @@ declare global {
   interface Window {
     zhimail: ZhimailApi;
     __zhimailDev?: {
+      setSkin?: (id: string) => void;
+      showUpdateDialog?: () => void;
       showMail?: () => void;
       showSettings?: (tab?: string) => void;
       maximizeAIPanel?: () => void;
