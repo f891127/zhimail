@@ -2,6 +2,8 @@
 
 import { useAppStore } from '@/store/useAppStore';
 import { Icon } from '@/components/Icon';
+import { ZH_LABEL_KEYS } from '@/lib/i18n';
+import { useT } from '@/lib/useT';
 
 export function StatusBar() {
   const {
@@ -49,7 +51,7 @@ export function StatusBar() {
     if (balanceLoading) return '余额查询中…';
     if (!balance) return '余额 --';
     if (balance.ok) return `余额 ${balance.label ?? '--'}`;
-    if (!balance.supported) return '余额 不支持';
+    if (!balance.supported) return '余额 --';
     return '余额 查询失败';
   })();
 

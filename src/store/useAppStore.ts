@@ -1,6 +1,7 @@
 /** 知邮 ZhiMail —— 渲染进程全局状态与业务动作 */
 
 import { create } from 'zustand';
+import { resolveLocale, translate, type Locale } from '@/lib/i18n';
 import { api } from '@/lib/api';
 import { htmlToPlain } from '@/lib/markdown';
 import { dateOnly, fullTime } from '@/lib/format';
@@ -75,6 +76,8 @@ interface State {
   accounts: Account[];
   folders: Folder[];
   settings: AppSettings | null;
+  /** 按设置与系统语言解析出的界面语言 */
+  locale: Locale;
   expandedAccounts: Record<string, boolean>;
 
   view: MainView;
@@ -157,6 +160,14 @@ interface State {
   removeAccount: (id: string) => Promise<void>;
   testAccount: (input: AccountInput) => Promise<{ imap: { ok: boolean; message: string }; smtp: { ok: boolean; message: string } }>;
   updateSettings: (patch: Record<string, unknown>) => Promise<void>;
+  reloadSettings: () => Promise<void>;
+  applySystemSettings: (patch: {
+    app?: Partial<AppSettings['app']>;
+    mail?: Partial<AppSettings['mail']>;
+    locale?: AppSettings['locale'];
+  }) => Promise<void>;
+  setDefaultMailClient: (enabled: boolean) => Promise<void>;
+  playNotifySound: () => void;
   resetDemo: () => Promise<void>;
 
   setView: (view: MainView) => void;
@@ -246,6 +257,7 @@ export const useAppStore = create<State>((set, get) => ({
   accounts: [],
   folders: [],
   settings: null,
+  locale: 'zh-CN' as Locale,
   expandedAccounts: {},
 
   view: 'mail',
@@ -316,6 +328,8 @@ export const useAppStore = create<State>((set, get) => ({
       accounts,
       folders,
       settings,
+      locale: resolveLocale(settings.locale, navigator.language),
+      threadMode: (settings.mail?.listMode ?? 'conversation') === 'conversation',
       ready: true,
       selectedAccountId: firstAccount?.id ?? null,
       selectedFolderId: inbox?.id ?? null,
@@ -351,8 +365,19 @@ export const useAppStore = create<State>((set, get) => ({
     });
     api.on('mail:new', (payload) => {
       const { accountId } = payload as { accountId: string };
+      get().playNotifySound();
       get().pushToast({ type: 'info', title: '收到新邮件', message: '正在同步最新邮件…' });
       void get().syncNow(accountId);
+    });
+    // 点击系统通知后定位到该邮件
+    api.on('mail:open', (payload) => {
+      const { id } = payload as { id: string };
+      void (async () => {
+        await get().reloadFolders();
+        await get().loadMessages();
+        const target = get().messages.find((message) => message.id === id);
+        if (target) await get().selectMessage(id);
+      })();
     });
     api.on('mail:changed', () => {
       void get().reloadFolders();
@@ -383,6 +408,11 @@ export const useAppStore = create<State>((set, get) => ({
       showSettings: (tab?: string) =>
         set({ settingsOpen: true, settingsTab: (tab as State['settingsTab']) ?? 'ai' }),
       maximizeAIPanel: () => set({ aiPanelOpen: true, aiPanelMaximized: true }),
+      showCommon: (id: string) => void get().selectFolder(id),
+      selectSubject: (text: string) => {
+        const target = get().messages.find((message) => message.subject.includes(text));
+        if (target) void get().selectMessage(target.id);
+      },
     };
   },
 
@@ -614,9 +644,67 @@ export const useAppStore = create<State>((set, get) => ({
 
   testAccount: async (input) => api.accounts.test(input),
 
+  /** 应用程序行为设置（开机自启、任务栏、关闭行为、字体大小、语言等） */
+  applySystemSettings: async (patch) => {
+    await api.app.setSystem(patch);
+    await get().reloadSettings();
+    await get().loadMessages();
+  },
+
+  setDefaultMailClient: async (enabled) => {
+    const result = await api.app.setDefaultMailClient(enabled);
+    if (!result.ok) {
+      get().pushToast({ type: 'error', title: '注册默认邮件客户端失败', message: result.error ?? '未知错误' });
+      return;
+    }
+    get().pushToast({
+      type: 'success',
+      title: enabled ? '已注册为默认邮件客户端' : '已取消默认邮件客户端',
+      message: enabled ? '系统打开 mailto: 链接时会启动知邮' : '已移除相关注册表项',
+    });
+    await get().reloadSettings();
+  },
+
+  /** 新邮件提醒声音：用 Web Audio 生成短提示音，避免额外音频资源 */
+  playNotifySound: () => {
+    if (!(get().settings?.mail?.notifySound ?? false)) return;
+    try {
+      const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctor) return;
+      const context = new Ctor();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(880, context.currentTime);
+      oscillator.frequency.setValueAtTime(1174, context.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.0001, context.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.15, context.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.3);
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.32);
+      oscillator.onended = () => void context.close();
+    } catch {
+      /* 忽略音频异常 */
+    }
+  },
+
   updateSettings: async (patch) => {
     const settings = await api.settings.update(patch);
-    set({ settings });
+    set({
+      settings,
+      locale: resolveLocale(settings.locale, navigator.language),
+      threadMode: (settings.mail?.listMode ?? 'conversation') === 'conversation',
+    });
+    await get().loadMessages();
+  },
+  reloadSettings: async () => {
+    const settings = await api.settings.get();
+    set({
+      settings,
+      locale: resolveLocale(settings.locale, navigator.language),
+      threadMode: (settings.mail?.listMode ?? 'conversation') === 'conversation',
+    });
   },
 
   resetDemo: async () => {

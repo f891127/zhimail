@@ -2,12 +2,19 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
+import { AttachmentPreview } from '@/components/AttachmentPreview';
 import { Icon } from '@/components/Icon';
 import { addressLabel, fileSize, fullTime, senderName } from '@/lib/format';
 import { buildMailDocument, renderMarkdown, textToHtml } from '@/lib/markdown';
 import { api } from '@/lib/api';
 import { ContextMenu, type ContextMenuItem } from '@/components/ContextMenu';
-import { DEFAULT_READER_ACTIONS, READER_ACTION_VISIBLE_LIMIT, findReaderAction } from '@/lib/readerActions';
+import {
+  DEFAULT_READER_ACTIONS,
+  READER_ACTION_LIMIT_MAX,
+  READER_ACTION_LIMIT_MIN,
+  READER_ACTION_VISIBLE_LIMIT,
+  findReaderAction,
+} from '@/lib/readerActions';
 import type { MessageMeta } from '@/types/zhimail';
 
 function EmptyReading() {
@@ -42,6 +49,8 @@ export function ReadingPane() {
   const [showThread, setShowThread] = useState(false);
   const [moreMenu, setMoreMenu] = useState<{ x: number; y: number } | null>(null);
   const [showAllRecipients, setShowAllRecipients] = useState(false);
+  /** 附件预览弹窗（受设置中的「附件预览」开关控制） */
+  const [preview, setPreview] = useState<{ filename: string; size?: number } | null>(null);
 
   useEffect(() => {
     setShowThread(false);
@@ -77,8 +86,13 @@ export function ReadingPane() {
   const configuredActions = configuredIds
     .map((id) => findReaderAction(id))
     .filter((action): action is NonNullable<typeof action> => Boolean(action));
-  const visibleActions = configuredActions.slice(0, READER_ACTION_VISIBLE_LIMIT);
-  const overflowActions = configuredActions.slice(READER_ACTION_VISIBLE_LIMIT);
+  // 最多显示几项由「设置 → 界面」决定，默认 7 项
+  const actionLimit = Math.min(
+    READER_ACTION_LIMIT_MAX,
+    Math.max(READER_ACTION_LIMIT_MIN, store.settings?.ui?.readerActionLimit ?? READER_ACTION_VISIBLE_LIMIT),
+  );
+  const visibleActions = configuredActions.slice(0, actionLimit);
+  const overflowActions = configuredActions.slice(actionLimit);
 
   const readerHandlers: Record<string, () => void> = {
     reply: () => store.replyToMessage('reply'),
@@ -179,8 +193,8 @@ export function ReadingPane() {
           </div>
         </div>
 
-        {/* 操作条：显示哪些操作可在「设置 → 界面」中配置 */}
-        <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-shell-lineSoft py-1.5">
+        {/* 操作条：统一靠右排列，显示哪些操作、最多几项均可在「设置 → 界面」中配置 */}
+        <div className="mt-2 flex flex-wrap items-center justify-end gap-1 border-t border-shell-lineSoft py-1.5">
           {visibleActions.map((action) => (
             <button
               key={action.id}
@@ -314,6 +328,15 @@ export function ReadingPane() {
         )}
       </div>
 
+      {preview && selectedMessage && (
+        <AttachmentPreview
+          messageId={selectedMessage.id}
+          filename={preview.filename}
+          size={preview.size}
+          onClose={() => setPreview(null)}
+        />
+      )}
+
       {/* 附件 */}
       {selectedMessage.body.attachments.length > 0 && (
         <div className="shrink-0 border-t border-shell-line bg-[#fafbfc] px-4 py-2">
@@ -325,8 +348,20 @@ export function ReadingPane() {
             {selectedMessage.body.attachments.map((attachment) => (
               <button
                 key={`${attachment.index}-${attachment.filename}`}
+                onDoubleClick={() => attachment.localPath && void api.system.openPath(attachment.localPath)}
                 type="button"
-                onClick={() => attachment.localPath && void api.system.openPath(attachment.localPath)}
+                onClick={() => {
+                  const previewOn = store.settings?.mail?.attachmentPreview ?? true;
+                  if (previewOn && !attachment.localPath) {
+                    setPreview({ filename: attachment.filename, size: attachment.size });
+                    return;
+                  }
+                  if (previewOn) {
+                    setPreview({ filename: attachment.filename, size: attachment.size });
+                    return;
+                  }
+                  if (attachment.localPath) void api.system.openPath(attachment.localPath);
+                }}
                 className="flex items-center gap-1.5 rounded border border-shell-line bg-white px-2 py-1 text-[11px] text-shell-text transition-colors duration-120 hover:border-brand-300 hover:text-brand-600"
                 title={attachment.localPath ?? '附件尚未下载'}
               >

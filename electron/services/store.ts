@@ -63,6 +63,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
       'translateEn',
       'todos',
     ],
+    readerActionLimit: 7,
   },
   backup: {
     autoEnabled: false,
@@ -83,6 +84,19 @@ export const DEFAULT_SETTINGS: AppSettings = {
     source: 'github',
     customUrl: '',
   },
+  app: {
+    autoLaunch: false,
+    showInTaskbar: true,
+    quitOnClose: true,
+    fontScale: 'standard',
+  },
+  mail: {
+    notify: true,
+    notifySound: false,
+    attachmentPreview: true,
+    listMode: 'conversation',
+  },
+  locale: 'system',
 };
 
 /** 默认简报排程：每天/每周/每月/每年各一组，可在设置中增删与改周期 */
@@ -447,6 +461,13 @@ export class Store {
       if (query.unreadOnly && m.flags.includes('\\Seen')) return false;
       if (query.flaggedOnly && !m.flags.includes('\\Flagged')) return false;
       if (query.hasAttachment && !m.hasAttachments) return false;
+      if (query.hasLabel && !(m.labels && m.labels.length > 0)) return false;
+      if (query.importance && m.importance !== query.importance) return false;
+      if (query.messageIds && !query.messageIds.includes(m.id)) return false;
+      if (query.excludeKinds && query.excludeKinds.length > 0) {
+        const folder = this.state.folders.find((item) => item.id === m.folderId);
+        if (folder && query.excludeKinds.includes(folder.kind)) return false;
+      }
       if (query.since && m.date < query.since) return false;
       if (query.until && m.date > query.until) return false;
       if (from) {

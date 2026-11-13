@@ -47,7 +47,8 @@ export type IconName =
   | 'sort'
   | 'filter'
   | 'undo'
-  | 'info';
+  | 'info'
+  | 'tag';
 
 const PATHS: Record<IconName, JSX.Element> = {
   mail: (
@@ -108,6 +109,12 @@ const PATHS: Record<IconName, JSX.Element> = {
     </>
   ),
   star: <path d="M12 3.6l2.6 5.3 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z" />,
+  tag: (
+    <>
+      <path d="M20.5 13.3l-7.2 7.2a1.6 1.6 0 0 1-2.3 0l-7-7a1.6 1.6 0 0 1-.5-1.2V5.5A1.5 1.5 0 0 1 5 4h6.8c.4 0 .9.2 1.2.5l7.5 7.5c.6.6.6 1.7 0 2.3z" />
+      <circle cx="8.2" cy="8.2" r="1.2" />
+    </>
+  ),
   'star-filled': (
     <path
       d="M12 3.6l2.6 5.3 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z"

@@ -2,6 +2,8 @@
 
 import { useAppStore } from '@/store/useAppStore';
 import { Icon } from '@/components/Icon';
+import { ZH_LABEL_KEYS } from '@/lib/i18n';
+import { useT } from '@/lib/useT';
 import { ContextMenu, type ContextMenuItem } from '@/components/ContextMenu';
 import { listTime, senderName, addressLabel } from '@/lib/format';
 import type { MessageMeta } from '@/types/zhimail';
@@ -183,8 +185,30 @@ function ThreadRow({
 
 export function MessageList() {
   const store = useAppStore();
-  const { messages, threads, threadMode, loadingMessages, filters, messageTotal, searchActive, searchExplain, selectedFolderId } =
+  const listMode = store.settings?.mail?.listMode ?? 'conversation';
+  const threadMode = listMode === 'conversation';
+  const {
+    messages: rawMessages,
+    threads,
+    loadingMessages,
+    filters,
+    messageTotal,
+    searchActive,
+    searchExplain,
+    selectedFolderId,
+    selectedMessage,
+  } =
     store;
+
+  // 相关邮件模式：只看与当前选中邮件同话题或同发件人的邮件
+  const messages =
+    listMode === 'related' && selectedMessage
+      ? rawMessages.filter(
+          (message) =>
+            (message.threadId && message.threadId === selectedMessage.threadId) ||
+            (message.from[0]?.address && message.from[0]?.address === selectedMessage.from[0]?.address),
+        )
+      : rawMessages;
 
   const folder = store.folders.find((item) => item.id === selectedFolderId);
   const [menu, setMenu] = useState<{ x: number; y: number; message: MessageMeta } | null>(null);
@@ -289,17 +313,20 @@ export function MessageList() {
         </button>
 
         <div className="ml-auto flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => void store.setThreadMode(!threadMode)}
-            className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-[2px] transition-colors duration-120 ${
-              threadMode ? 'bg-brand-100 text-brand-700' : 'hover:bg-black/[0.05]'
-            }`}
-            title="按会话聚合"
+          <select
+            value={listMode}
+            onChange={(event) =>
+              void store.applySystemSettings({
+                mail: { ...store.settings?.mail, listMode: event.target.value as 'normal' | 'conversation' | 'related' },
+              })
+            }
+            title="邮件列表显示模式"
+            className="shrink-0 rounded border border-shell-lineSoft bg-white px-1 py-[1px] text-[11px] text-shell-sub hover:bg-black/[0.03]"
           >
-            <Icon name="panel" size={11} />
-            会话
-          </button>
+            <option value="normal">普通模式</option>
+            <option value="conversation">会话模式</option>
+            <option value="related">相关邮件模式</option>
+          </select>
           <button
             type="button"
             onClick={() => void store.loadMessages()}
@@ -331,7 +358,11 @@ export function MessageList() {
         {!loadingMessages && messages.length === 0 && (
           <div className="flex flex-col items-center gap-2 px-6 py-16 text-center text-shell-faint">
             <Icon name="inbox" size={30} className="text-shell-line" strokeWidth={1.2} />
-            <p className="text-xs">当前文件夹没有符合条件的邮件</p>
+            <p className="text-xs">
+              {listMode === 'related' && selectedMessage
+                ? '当前邮件没有其它相关邮件（同话题或同发件人）'
+                : '当前文件夹没有符合条件的邮件'}
+            </p>
             <p className="text-[11px]">
               {store.accounts.some((account) => account.demo)
                 ? '演示邮箱已内置示例邮件；也可在「设置 → 账户」中添加真实邮箱并同步'

@@ -91,6 +91,9 @@ export const DEFAULT_READER_ACTIONS = [
 
 /** 操作条最多直接展示的按钮数量，超出部分收进「更多」 */
 export const READER_ACTION_VISIBLE_LIMIT = 7;
+/** 操作条最多显示项数的可配置范围 */
+export const READER_ACTION_LIMIT_MIN = 3;
+export const READER_ACTION_LIMIT_MAX = 12;
 
 export function findReaderAction(id: string): ReaderActionDef | undefined {
   return READER_ACTIONS.find((action) => action.id === id);

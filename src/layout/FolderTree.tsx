@@ -1,6 +1,8 @@
 /** 左侧文件夹树：账户 / 内置文件夹 / 自定义文件夹 / 邮件简报 / 待办入口 */
 
 import { useState } from 'react';
+import { ZH_LABEL_KEYS, folderDisplayName } from '@/lib/i18n';
+import { useT } from '@/lib/useT';
 import { useAppStore } from '@/store/useAppStore';
 import { Icon, type IconName } from '@/components/Icon';
 import { ContextMenu, type ContextMenuItem } from '@/components/ContextMenu';
@@ -29,21 +31,46 @@ const KIND_COLOR: Record<string, string> = {
   brief: 'text-brand-600',
 };
 
+/** 常用文件夹（虚拟视图）的图标与配色 */
+const COMMON_STYLE: Record<string, { icon: IconName; color: string }> = {
+  'common/unread': { icon: 'mail', color: 'text-brand-500' },
+  'common/flagged': { icon: 'star-filled', color: 'text-amber-500' },
+  'common/labels': { icon: 'tag', color: 'text-violet-500' },
+  'common/important': { icon: 'alert', color: 'text-rose-500' },
+  'common/todo': { icon: 'checklist', color: 'text-emerald-600' },
+};
+
 function FolderRow({
   folder,
   active,
   indent = 0,
   onClick,
   onContext,
+  expandable,
+  expanded,
+  onToggle,
 }: {
   folder: Folder;
   active: boolean;
   indent?: number;
   onClick: () => void;
   onContext?: (event: React.MouseEvent, folder: Folder) => void;
+  expandable?: boolean;
+  expanded?: boolean;
+  onToggle?: () => void;
 }) {
-  const icon = KIND_ICON[folder.kind] ?? 'folder';
-  const color = KIND_COLOR[folder.kind] ?? 'text-shell-sub';
+  const t = useT();
+  const locale = useAppStore((state) => state.locale);
+  const tt = (label: string) => (ZH_LABEL_KEYS[label] ? t(ZH_LABEL_KEYS[label]) : label);
+  const icon = COMMON_STYLE[folder.id]?.icon ?? KIND_ICON[folder.kind] ?? 'folder';
+  const color = COMMON_STYLE[folder.id]?.color ?? KIND_COLOR[folder.kind] ?? 'text-shell-sub';
+  // 内置文件夹与常用文件夹的显示名随界面语言切换，自定义文件夹保留用户命名
+  const displayName =
+    COMMON_STYLE[folder.id] || folder.kind === 'brief'
+      ? tt(folder.name)
+      : folder.kind === 'custom' || folder.kind === 'virtual'
+        ? folder.name
+        : folderDisplayName(locale, folder.kind, folder.name);
   return (
     <button
       type="button"
@@ -54,6 +81,18 @@ function FolderRow({
       }`}
       style={{ paddingLeft: 8 + indent * 14 }}
     >
+      {expandable && (
+        <span
+          role="presentation"
+          className={`flex h-3.5 w-3.5 items-center justify-center ${active ? 'text-white' : 'text-shell-faint'}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggle?.();
+          }}
+        >
+          <Icon name={expanded ? 'chevron-down' : 'chevron-right'} size={10} />
+        </span>
+      )}
       <Icon
         name={icon}
         size={14}
@@ -81,6 +120,9 @@ function FolderRow({
 
 export function FolderTree() {
   const store = useAppStore();
+  const t = useT();
+  /** 按中文原文取当前语言文案，未收录的原样显示 */
+  const tt = (label: string) => (ZH_LABEL_KEYS[label] ? t(ZH_LABEL_KEYS[label]) : label);
   const {
     accounts,
     folders,
@@ -96,6 +138,8 @@ export function FolderTree() {
     info,
   } = store;
 
+  const [commonExpanded, setCommonExpanded] = useState(true);
+  const [labelsExpanded, setLabelsExpanded] = useState(true);
   const [creatingIn, setCreatingIn] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [menu, setMenu] = useState<{ x: number; y: number; folder: Folder } | null>(null);
@@ -135,15 +179,69 @@ export function FolderTree() {
     { label: '删除文件夹', disabled: folder.kind !== 'custom', onClick: () => void removeFolder(folder) },
   ];
 
+  const commonRoot = folders.find((folder) => folder.id === 'common');
+  const commonChildren = folders.filter((folder) => folder.parentId === 'common');
+  const labelChildren = folders.filter((folder) => folder.parentId === 'common/labels');
   const briefRoot = folders.find((folder) => folder.id === 'briefs');
   const briefGroups = folders.filter((folder) => folder.parentId === 'briefs');
 
   return (
     <div className="flex h-full w-full flex-col bg-shell-bg">
       <div className="scroll-area flex-1 py-1.5">
+        {commonRoot && (
+          <div className="mb-1 border-b border-shell-lineSoft pb-1">
+            <button
+              type="button"
+              onClick={() => setCommonExpanded((value) => !value)}
+              className="group flex h-[28px] w-full items-center gap-1.5 rounded-[3px] px-1.5 text-left hover:bg-black/[0.03]"
+            >
+              <span className="flex h-4 w-4 items-center justify-center text-shell-faint">
+                <Icon name={commonExpanded ? 'chevron-down' : 'chevron-right'} size={12} />
+              </span>
+              <Icon name="folder-open" size={14} className="text-amber-500" />
+              <span className="flex-1 truncate text-xs font-medium text-shell-text">{tt('常用文件夹')}</span>
+            </button>
+
+            {commonExpanded &&
+              commonChildren.map((folder) =>
+                folder.id === 'common/labels' ? (
+                  <div key={folder.id}>
+                    <FolderRow
+                      folder={folder}
+                      active={selectedFolderId === folder.id && view === 'mail'}
+                      indent={1}
+                      expandable
+                      expanded={labelsExpanded}
+                      onToggle={() => setLabelsExpanded((value) => !value)}
+                      onClick={() => void selectFolder(folder.id)}
+                    />
+                    {labelsExpanded &&
+                      labelChildren.map((child) => (
+                        <FolderRow
+                          key={child.id}
+                          folder={child}
+                          active={selectedFolderId === child.id && view === 'mail'}
+                          indent={2}
+                          onClick={() => void selectFolder(child.id)}
+                        />
+                      ))}
+                  </div>
+                ) : (
+                  <FolderRow
+                    key={folder.id}
+                    folder={folder}
+                    active={selectedFolderId === folder.id && view === 'mail'}
+                    indent={1}
+                    onClick={() => void selectFolder(folder.id)}
+                  />
+                ),
+              )}
+          </div>
+        )}
+
         {accounts.map((account) => {
           const accountFolders = folders
-            .filter((folder) => folder.accountId === account.id)
+            .filter((folder) => folder.accountId === account.id && folder.kind !== 'virtual')
             .sort((a, b) => a.order - b.order);
           const expanded = expandedAccounts[account.id] ?? true;
           const totalUnread = accountFolders.reduce((sum, folder) => sum + folder.unread, 0);
@@ -249,7 +347,7 @@ export function FolderTree() {
               }`}
             >
               <Icon name="document" size={14} className="text-brand-600" />
-              <span className="flex-1 font-medium">邮件简报</span>
+              <span className="flex-1 font-medium">{tt('邮件简报')}</span>
               <span
                 className={`text-[10px] tabular-nums ${
                   view === 'briefs' && selectedFolderId === 'briefs' ? 'text-white/70' : 'text-shell-faint'
@@ -279,7 +377,7 @@ export function FolderTree() {
             }`}
           >
             <Icon name="checklist" size={14} className={view === 'todos' ? 'text-white' : 'text-emerald-600'} />
-            <span className="flex-1 font-medium">待办事项</span>
+            <span className="flex-1 font-medium">{tt('待办事项')}</span>
             {todoStats.pending > 0 && (
               <span className={`badge ${view === 'todos' ? 'bg-white/25 text-white' : 'bg-accent-500 text-white'}`}>
                 {todoStats.pending}
@@ -296,7 +394,7 @@ export function FolderTree() {
           className="flex h-[26px] w-full items-center gap-1.5 rounded px-1.5 text-xs text-shell-sub transition-colors duration-120 hover:bg-black/[0.045] hover:text-shell-text"
         >
           <Icon name="settings" size={13} />
-          <span className="flex-1 text-left">设置</span>
+          <span className="flex-1 text-left">{tt('设置')}</span>
           <span className="text-[10px] text-shell-faint">v{info?.version ?? '1.0.0'}</span>
         </button>
       </div>

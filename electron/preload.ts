@@ -8,6 +8,7 @@ const EVENT_CHANNELS = [
   'sync:progress',
   'mail:new',
   'mail:changed',
+  'mail:open',
   'ai:progress',
   'brief:generated',
   'brief:error',
@@ -20,6 +21,9 @@ const api = {
     chooseDataDir: () => invoke('app/chooseDataDir'),
     resetDataDir: () => invoke('app/resetDataDir'),
     relaunch: () => invoke('app/relaunch'),
+    system: () => invoke('app/system'),
+    setSystem: (patch: Record<string, unknown>) => invoke('app/system/set', patch),
+    setDefaultMailClient: (enabled: boolean) => invoke('app/defaultMailClient/set', enabled),
   },
   accounts: {
     list: () => invoke('accounts/list'),
@@ -34,6 +38,8 @@ const api = {
   },
   messages: {
     list: (query: unknown) => invoke('messages/list', query),
+    attachmentData: (payload: { messageId: string; filename: string }) =>
+      invoke('messages/attachmentData', payload),
     get: (id: string) => invoke('messages/get', id),
     thread: (threadId: string) => invoke('messages/thread', threadId),
     threads: (query: unknown) => invoke('messages/threads', query),
@@ -109,6 +115,7 @@ const api = {
     check: () => invoke('update/check'),
     download: () => invoke('update/download'),
     install: () => invoke('update/install'),
+    openRelease: () => invoke('update/openRelease'),
   },
   on: (channel: string, handler: (payload: unknown) => void) => {
     if (!EVENT_CHANNELS.includes(channel as (typeof EVENT_CHANNELS)[number])) {

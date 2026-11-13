@@ -3,9 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { Icon } from '@/components/Icon';
+import { ZH_LABEL_KEYS } from '@/lib/i18n';
+import { useT } from '@/lib/useT';
 
 export function ToolBar() {
   const store = useAppStore();
+  const t = useT();
+  const tt = (label: string) => (ZH_LABEL_KEYS[label] ? t(ZH_LABEL_KEYS[label]) : label);
   const {
     selectedMessageId,
     selectedMessage,
@@ -115,7 +119,7 @@ export function ToolBar() {
             if (event.key === 'Enter') void search(keyword, event.shiftKey);
             if (event.key === 'Escape') void clearSearch();
           }}
-          placeholder="搜索邮件，或输入「上周张工发来的灭菌验证邮件」后按 Shift+Enter 让 AI 解析"
+          placeholder={t('toolbar.searchPlaceholder')}
           className="h-full flex-1 bg-transparent text-xs text-shell-text outline-none placeholder:text-shell-faint"
         />
         {searchActive && (

@@ -1,14 +1,22 @@
 /** 设置：邮箱账户、AI 模型接入、自动简报、关于与快捷键 */
 
 import { useEffect, useState } from 'react';
+import { SystemSettingsPage } from '@/features/settings/SystemSettingsPage';
 import { useAppStore } from '@/store/useAppStore';
 import { Icon, type IconName } from '@/components/Icon';
 import { api } from '@/lib/api';
 import type { AccountInput, AppSettings, BackupOverview, BriefKind, BriefSchedule } from '@/types/zhimail';
 import { fileSize } from '@/lib/format';
-import { DEFAULT_READER_ACTIONS, READER_ACTIONS, READER_ACTION_GROUPS } from '@/lib/readerActions';
+import {
+  DEFAULT_READER_ACTIONS,
+  READER_ACTIONS,
+  READER_ACTION_GROUPS,
+  READER_ACTION_LIMIT_MAX,
+  READER_ACTION_LIMIT_MIN,
+  READER_ACTION_VISIBLE_LIMIT,
+} from '@/lib/readerActions';
 
-type TabId = 'account' | 'ai' | 'ui' | 'brief' | 'data' | 'update' | 'about';
+type TabId = 'account' | 'ai' | 'ui' | 'brief' | 'data' | 'update' | 'about' | 'app';
 
 /** 常用 GitHub 加速镜像：均为第三方服务，仅作为快捷填入 */
 const UPDATE_MIRRORS = [
@@ -33,6 +41,7 @@ const UPDATE_MIRRORS = [
 const TABS: { id: TabId; label: string; icon: IconName }[] = [
   { id: 'account', label: '邮箱账户', icon: 'user' },
   { id: 'ai', label: 'AI 助手', icon: 'sparkles' },
+  { id: 'app', label: '系统设置', icon: 'settings' },
   { id: 'ui', label: '界面', icon: 'panel' },
   { id: 'brief', label: '自动简报', icon: 'calendar' },
   { id: 'data', label: '数据与备份', icon: 'archive' },
@@ -1031,6 +1040,8 @@ export function SettingsDialog() {
               </div>
             )}
 
+            {tab === 'app' && <SystemSettingsPage />}
+
             {tab === 'ui' && settings && (
               <div className="space-y-3">
                 <div className="text-[11px] leading-5 text-shell-sub">
@@ -1068,17 +1079,37 @@ export function SettingsDialog() {
                   </div>
                 ))}
 
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="field-label mb-0">操作条最多显示</label>
+                  <select
+                    value={settings.ui.readerActionLimit ?? READER_ACTION_VISIBLE_LIMIT}
+                    onChange={(event) => void saveUISettings({ readerActionLimit: Number(event.target.value) })}
+                    className="field w-[86px]"
+                  >
+                    {Array.from(
+                      { length: READER_ACTION_LIMIT_MAX - READER_ACTION_LIMIT_MIN + 1 },
+                      (_, index) => READER_ACTION_LIMIT_MIN + index,
+                    ).map((count) => (
+                      <option key={count} value={count}>
+                        {count} 项
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[11px] text-shell-faint">
+                    超出的收进「更多」；当前已选 {(settings.ui.readerActions ?? []).length} 项
+                  </span>
                   <button
                     type="button"
                     className="ghost-btn"
-                    onClick={() => void saveUISettings({ readerActions: [...DEFAULT_READER_ACTIONS] })}
+                    onClick={() =>
+                      void saveUISettings({
+                        readerActions: [...DEFAULT_READER_ACTIONS],
+                        readerActionLimit: READER_ACTION_VISIBLE_LIMIT,
+                      })
+                    }
                   >
-                    恢复默认组合
+                    恢复默认
                   </button>
-                  <span className="text-[11px] text-shell-faint">
-                    当前已选 {(settings.ui.readerActions ?? []).length} 项
-                  </span>
                 </div>
               </div>
             )}
@@ -1255,6 +1286,7 @@ export function SettingsDialog() {
                           'not-available': '已是最新版本',
                           downloading: `正在下载 ${updateState?.percent ?? 0}%`,
                           downloaded: '下载完成，可重启安装',
+                          installing: '正在安装并重启…',
                           error: '检查失败',
                           unsupported: '开发模式不可用',
                         }[updateState?.phase ?? 'idle']
@@ -1293,13 +1325,33 @@ export function SettingsDialog() {
                       下载更新
                     </button>
                   )}
-                  {updateState?.phase === 'downloaded' && (
-                    <button type="button" className="ghost-btn" onClick={() => void store.installUpdate()}>
+                  {updateState?.phase === 'downloaded' && updateState.canAutoInstall && (
+                    <button type="button" className="primary-btn" onClick={() => void store.installUpdate()}>
                       <Icon name="check-circle" size={12} />
-                      立即重启安装
+                      立即重启并安装
                     </button>
                   )}
+                  {updateState?.phase === 'downloaded' && !updateState.canAutoInstall && (
+                    <button type="button" className="ghost-btn" onClick={() => void api.update.openRelease()}>
+                      <Icon name="external" size={12} />
+                      打开发布页下载新版
+                    </button>
+                  )}
+                  {updateState?.phase === 'installing' && (
+                    <span className="flex items-center gap-1 text-[11px] text-brand-600">
+                      <Icon name="refresh" size={12} className="animate-spin" />
+                      正在退出并安装，安装完成后会自动重启
+                    </span>
+                  )}
                 </div>
+
+                {updateState?.phase === 'downloaded' && !updateState.canAutoInstall && (
+                  <div className="rounded border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] leading-4 text-amber-800">
+                    <Icon name="alert" size={11} className="mr-1 inline" />
+                    当前运行的是<strong>免安装便携版</strong>，更新程序无法替换正在运行的程序文件，因此不会自动安装。
+                    请下载新版便携包解压覆盖原目录（数据在数据目录中，不会丢失）；若希望以后一键自动更新，请改用安装版。
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <label className="flex cursor-pointer items-center gap-2 rounded border border-shell-lineSoft px-2.5 py-2">

@@ -68,6 +68,111 @@ function pickNumber(source: unknown, keys: string[]): number | undefined {
   return undefined;
 }
 
+/** 余额返回值的统一解析器 */
+type BalanceParser = (data: unknown) => {
+  total?: number;
+  granted?: number;
+  toppedUp?: number;
+  used?: number;
+  currency?: string;
+} | null;
+
+const deepseekParse: BalanceParser = (data) => {
+  const infos = (data as { balance_infos?: Record<string, unknown>[] })?.balance_infos ?? [];
+  const info = infos[0];
+  if (!info) return null;
+  const total = pickNumber(info, ['total_balance']);
+  if (total === undefined) return null;
+  return {
+    total,
+    granted: pickNumber(info, ['granted_balance']),
+    toppedUp: pickNumber(info, ['topped_up_balance']),
+    currency: String(info.currency ?? 'CNY'),
+  };
+};
+
+const moonshotParse: BalanceParser = (data) => {
+  const info = (data as { data?: Record<string, unknown> })?.data ?? {};
+  const total = pickNumber(info, ['available_balance']);
+  if (total === undefined) return null;
+  return {
+    total,
+    granted: pickNumber(info, ['voucher_balance']),
+    toppedUp: pickNumber(info, ['cash_balance']),
+    currency: 'CNY',
+  };
+};
+
+const siliconflowParse: BalanceParser = (data) => {
+  const info = (data as { data?: Record<string, unknown> })?.data ?? {};
+  const total = pickNumber(info, ['totalBalance', 'balance']);
+  if (total === undefined) return null;
+  return {
+    total,
+    granted: pickNumber(info, ['balance']),
+    toppedUp: pickNumber(info, ['chargeBalance']),
+    currency: 'CNY',
+  };
+};
+
+const openrouterParse: BalanceParser = (data) => {
+  const info = (data as { data?: Record<string, unknown> })?.data ?? {};
+  const credits = pickNumber(info, ['total_credits']);
+  const usage = pickNumber(info, ['total_usage']) ?? 0;
+  if (credits === undefined) return null;
+  return { total: Math.max(0, credits - usage), used: usage, currency: 'USD' };
+};
+
+/** 常见余额接口的相对路径与解析方式（顺序即优先级） */
+const BALANCE_ENDPOINTS: { path: string; parse: BalanceParser }[] = [
+  { path: 'user/balance', parse: deepseekParse },
+  { path: 'users/me/balance', parse: moonshotParse },
+  { path: 'user/info', parse: siliconflowParse },
+  { path: 'credits', parse: openrouterParse },
+];
+
+/** 预置服务商对应的官方余额地址，自定义中转地址查询不到时用它兜底 */
+const PRESET_BALANCE: Record<string, { url: string; parse: BalanceParser; name: string }> = {
+  deepseek: { url: 'https://api.deepseek.com/user/balance', parse: deepseekParse, name: 'DeepSeek' },
+  moonshot: { url: 'https://api.moonshot.cn/v1/users/me/balance', parse: moonshotParse, name: 'Moonshot' },
+  siliconflow: { url: 'https://api.siliconflow.cn/v1/user/info', parse: siliconflowParse, name: 'SiliconFlow' },
+  openrouter: { url: 'https://openrouter.ai/api/v1/credits', parse: openrouterParse, name: 'OpenRouter' },
+};
+
+/** 用给定的基础地址逐个试探常见余额接口 */
+async function probeEndpoints(
+  roots: string[],
+  apiKey: string,
+  providerName: string,
+): Promise<BalanceInfo | null> {
+  for (const root of roots) {
+    for (const endpoint of BALANCE_ENDPOINTS) {
+      try {
+        const { status, data } = await getJson(`${root}/${endpoint.path}`, apiKey);
+        if (status >= 400) continue;
+        const parsed = endpoint.parse(data);
+        if (!parsed || parsed.total === undefined) continue;
+        const currency = parsed.currency ?? 'CNY';
+        return {
+          ok: true,
+          supported: true,
+          provider: providerName,
+          currency,
+          total: parsed.total,
+          granted: parsed.granted,
+          toppedUp: parsed.toppedUp,
+          used: parsed.used,
+          label: formatAmount(parsed.total, currency),
+          fetchedAt: Date.now(),
+        };
+      } catch {
+        /* 继续尝试下一个接口 */
+      }
+    }
+  }
+  return null;
+}
+
 /** 查询当前配置的模型服务商余额 */
 export async function fetchBalance(force = false): Promise<BalanceInfo> {
   const settings = store.getSettings().ai;
@@ -176,13 +281,49 @@ export async function fetchBalance(force = false): Promise<BalanceInfo> {
         fetchedAt: Date.now(),
       };
     } else {
-      result = {
-        ok: false,
-        supported: false,
-        provider: settings.provider,
-        error: '该服务商暂不支持余额查询',
-        fetchedAt: Date.now(),
-      };
+      // 自定义中转地址：先试探当前地址，再尝试预置服务商的官方地址
+      const roots = [baseUrl.replace(/\/+$/, '')];
+      const preset = PRESET_BALANCE[settings.provider];
+      if (preset) roots.push(preset.url.replace(/\/[^/]*$/, ''));
+
+      const probed = await probeEndpoints(roots, apiKey, preset?.name ?? settings.provider);
+      if (probed) {
+        result = probed;
+      } else if (preset) {
+        const { status, data } = await getJson(preset.url, apiKey);
+        const parsed = status < 400 ? preset.parse(data) : null;
+        if (parsed && parsed.total !== undefined) {
+          const currency = parsed.currency ?? 'CNY';
+          result = {
+            ok: true,
+            supported: true,
+            provider: preset.name,
+            currency,
+            total: parsed.total,
+            granted: parsed.granted,
+            toppedUp: parsed.toppedUp,
+            used: parsed.used,
+            label: formatAmount(parsed.total, currency),
+            fetchedAt: Date.now(),
+          };
+        } else {
+          result = {
+            ok: false,
+            supported: false,
+            provider: preset.name,
+            error: `未能从 ${new URL(preset.url).host} 读取余额，可能需要在浏览器中登录官方控制台查看`,
+            fetchedAt: Date.now(),
+          };
+        }
+      } else {
+        result = {
+          ok: false,
+          supported: false,
+          provider: settings.provider,
+          error: '该服务商未提供公开的余额查询接口',
+          fetchedAt: Date.now(),
+        };
+      }
     }
   } catch (error) {
     result = fail(settings.provider, (error as Error).message || '查询失败');

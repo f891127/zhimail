@@ -16,6 +16,7 @@ import { SettingsDialog } from '@/features/settings/SettingsDialog';
 import { ChangelogDialog } from '@/features/changelog/ChangelogDialog';
 import { LAST_SEEN_VERSION_KEY } from '@/lib/changelog';
 import { ToastHost } from '@/components/ToastHost';
+import { UpdateInstallingOverlay } from '@/components/UpdateInstallingOverlay';
 
 function Splitter({ onDrag }: { onDrag: (deltaX: number) => void }) {
   const dragging = useRef(false);
@@ -219,6 +220,7 @@ export default function App() {
 
       <StatusBar />
 
+      <UpdateInstallingOverlay />
       <ComposeWindow />
       <SettingsDialog />
       <ChangelogDialog />

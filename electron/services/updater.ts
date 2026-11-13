@@ -3,7 +3,7 @@
  * 支持自动检查、手动检查、自动/手动下载，下载完成后重启安装。
  */
 
-import { app, BrowserWindow } from 'electron';
+import { app } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { store } from './store';
 
@@ -17,12 +17,19 @@ export type UpdatePhase =
   | 'not-available'
   | 'downloading'
   | 'downloaded'
+  | 'installing'
   | 'error'
   | 'unsupported';
 
 export interface UpdateState {
   phase: UpdatePhase;
   currentVersion: string;
+  /** 安装形态：安装版可静默自动安装；便携版只能手动替换 */
+  installMode: 'installed' | 'portable' | 'dev';
+  /** 是否支持一键自动安装并重启 */
+  canAutoInstall: boolean;
+  /** 便携版手动下载页 */
+  releaseUrl: string;
   version?: string;
   releaseNotes?: string;
   releaseDate?: string;
@@ -32,9 +39,22 @@ export interface UpdateState {
   canCheck: boolean;
 }
 
+/** 便携版由 electron-builder 注入 PORTABLE_EXECUTABLE_DIR，此时无法静默替换自身文件 */
+function detectInstallMode(): 'installed' | 'portable' | 'dev' {
+  if (!app.isPackaged) return 'dev';
+  if (process.env.PORTABLE_EXECUTABLE_DIR || process.env.PORTABLE_EXECUTABLE_FILE) return 'portable';
+  return 'installed';
+}
+
+const installMode = detectInstallMode();
+export const RELEASE_URL = `https://github.com/${UPDATE_OWNER}/${UPDATE_REPO}/releases/latest`;
+
 let state: UpdateState = {
   phase: 'idle',
   currentVersion: app.getVersion(),
+  installMode,
+  canAutoInstall: installMode === 'installed',
+  releaseUrl: RELEASE_URL,
   canCheck: app.isPackaged,
 };
 
@@ -125,7 +145,12 @@ export function initUpdater(): void {
     }),
   );
   autoUpdater.on('update-downloaded', (info) =>
-    setState({ phase: 'downloaded', version: info.version, percent: 100 }),
+    setState({ phase: 'downloaded', version: info.version, percent: 100, error: undefined }),
+  );
+  // 该事件在部分 electron-updater 版本的类型定义中缺失，这里按事件名注册
+  (autoUpdater as unknown as { on: (event: string, listener: () => void) => void }).on(
+    'before-quit-for-update',
+    () => setState({ phase: 'installing' }),
   );
   autoUpdater.on('error', (error) => {
     const raw = String(error?.message ?? error);
@@ -184,10 +209,41 @@ export async function downloadUpdate(): Promise<UpdateState> {
   return state;
 }
 
-export function quitAndInstall(window?: BrowserWindow | null): void {
-  if (!app.isPackaged) return;
-  setImmediate(() => {
-    window?.destroy();
-    autoUpdater.quitAndInstall(false, true);
-  });
+/**
+ * 立即安装并重启：
+ * - 安装版：静默安装（isSilent=true）并在安装完成后自动启动新版本（isForceRunAfter=true）
+ * - 便携版：无法替换正在运行的程序文件，返回失败并提示手动下载
+ * 注意：不要在调用前销毁窗口，否则进程可能先退出，安装器根本没机会启动。
+ */
+export function installUpdate(): { ok: boolean; error?: string } {
+  if (!app.isPackaged) {
+    setState({ phase: 'unsupported', error: '开发模式无法安装更新' });
+    return { ok: false, error: '开发模式无法安装更新' };
+  }
+  if (installMode === 'portable') {
+    const error = '当前是免安装便携版，更新程序无法替换正在运行的文件。请下载新版便携包解压覆盖，或改用安装版以获得一键自动更新。';
+    setState({ phase: 'downloaded', error });
+    return { ok: false, error };
+  }
+
+  setState({ phase: 'installing', error: undefined });
+
+  // 兜底：若 25 秒后进程仍在运行，说明安装器没有启动，给出提示而不是无声无息
+  const timer = setTimeout(() => {
+    setState({
+      phase: 'downloaded',
+      error: '安装程序未能启动。请关闭应用后手动运行已下载的安装包，或重新点击「立即重启并安装」。',
+    });
+  }, 25_000);
+  if (typeof timer.unref === 'function') timer.unref();
+
+  try {
+    autoUpdater.quitAndInstall(true, true);
+  } catch (error) {
+    clearTimeout(timer);
+    const message = String((error as Error).message).slice(0, 300);
+    setState({ phase: 'downloaded', error: `启动安装失败：${message}` });
+    return { ok: false, error: message };
+  }
+  return { ok: true };
 }

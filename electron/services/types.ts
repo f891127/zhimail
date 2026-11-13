@@ -16,7 +16,9 @@ export type FolderKind =
   | 'junk'
   | 'archive'
   | 'custom'
-  | 'brief';
+  | 'brief'
+  /** 跨账户的虚拟视图（常用文件夹） */
+  | 'virtual';
 
 export interface ImapConfig {
   host: string;
@@ -145,6 +147,14 @@ export interface MessageQuery {
   unreadOnly?: boolean;
   flaggedOnly?: boolean;
   hasAttachment?: boolean;
+  /** 只返回带标签的邮件 */
+  hasLabel?: boolean;
+  /** 按 AI 重要度过滤 */
+  importance?: 'high' | 'normal' | 'low';
+  /** 排除指定类型的文件夹（如垃圾箱、已删除） */
+  excludeKinds?: string[];
+  /** 只返回这些邮件 id */
+  messageIds?: string[];
   offset?: number;
   limit?: number;
   sortBy?: 'date' | 'from' | 'subject' | 'size';
@@ -347,6 +357,8 @@ export interface UISettings {
   pageSize: number;
   /** 阅读窗格操作条显示的操作 id 列表，顺序即展示顺序 */
   readerActions: string[];
+  /** 阅读窗格操作条最多显示项数 */
+  readerActionLimit: number;
 }
 
 /** 备份设置 */
@@ -359,6 +371,33 @@ export interface BackupSettings {
   keep: number;
   /** 备份中是否包含凭据（邮箱密码与 AI Key，仍为加密存储） */
   includeSecrets: boolean;
+}
+
+/** 界面语言：跟随系统 / 简体中文 / English / 繁體中文 */
+export type AppLocale = 'system' | 'zh-CN' | 'en-US' | 'zh-TW';
+
+export interface AppBehaviorSettings {
+  /** 开机自动启动 */
+  autoLaunch: boolean;
+  /** 最小化时在任务栏显示 */
+  showInTaskbar: boolean;
+  /** 关闭主窗口时退出程序（否则最小化到托盘） */
+  quitOnClose: boolean;
+  /** 界面字体大小 */
+  fontScale: 'small' | 'standard' | 'large';
+  /** 是否已注册为系统默认邮件客户端（仅 Windows 有效） */
+  defaultMailClient?: boolean;
+}
+
+export interface MailBehaviorSettings {
+  /** 新邮件提醒窗口（系统通知） */
+  notify: boolean;
+  /** 新邮件提醒声音 */
+  notifySound: boolean;
+  /** 附件预览 */
+  attachmentPreview: boolean;
+  /** 列表模式：普通 / 会话 / 相关邮件 */
+  listMode: 'normal' | 'conversation' | 'related';
 }
 
 export interface AppSettings {
@@ -379,6 +418,12 @@ export interface AppSettings {
     /** 自定义更新源基础地址，需能访问到 latest.yml 与其列出的安装包 */
     customUrl: string;
   };
+  /** 程序行为（参照 Foxmail 系统设置） */
+  app: AppBehaviorSettings;
+  /** 邮件行为（参照 Foxmail 系统设置） */
+  mail: MailBehaviorSettings;
+  /** 界面语言 */
+  locale: AppLocale;
   /** 是否已完成首次初始化（用于播种演示数据） */
   bootstrapped?: boolean;
 }

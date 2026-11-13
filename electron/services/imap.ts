@@ -71,6 +71,7 @@ function detectFolderKind(path: string, specialUse: string | undefined): FolderK
 }
 
 const KIND_ORDER: Record<FolderKind, number> = {
+  virtual: -1,
   inbox: 0,
   draft: 1,
   sent: 2,

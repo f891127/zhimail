@@ -4,6 +4,8 @@ import { BrowserWindow, dialog, ipcMain, shell, app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { store } from './services/store';
+import type { AppLocale } from './services/types';
+import { applyAppBehavior, getDefaultMailClientStatus, setDefaultMailClient } from './services/system';
 import { fetchBalance, resetBalanceCache } from './services/ai/balance';
 import { defaultDataDir, isCustomDataDir, migrateData, saveDataDir } from './services/location';
 import {
@@ -35,7 +37,8 @@ import {
   checkForUpdates,
   downloadUpdate,
   getUpdateState,
-  quitAndInstall,
+  installUpdate,
+  RELEASE_URL,
 } from './services/updater';
 import {
   analyzeRange,
@@ -107,13 +110,65 @@ function briefFolders(): FolderView[] {
   return [root, ...groups];
 }
 
+/** 把「常用文件夹」的虚拟 id 翻译成查询条件 */
+function virtualFolderQuery(folderId: string, rest: MessageQuery): MessageQuery | null {
+  const base: MessageQuery = { ...rest, excludeKinds: ['trash', 'junk', 'draft'] };
+  if (folderId === 'common/unread') base.unreadOnly = true;
+  else if (folderId === 'common/flagged') base.flaggedOnly = true;
+  else if (folderId === 'common/important') base.importance = 'high';
+  else if (folderId === 'common/labels') base.hasLabel = true;
+  else if (folderId === 'common/todo') {
+    base.messageIds = listTodos()
+      .map((item) => item.sourceMessageId)
+      .filter((id): id is string => Boolean(id));
+    if (base.messageIds.length === 0) return { ...base, messageIds: ['__none__'] };
+  } else return null;
+  return base;
+}
+
+/** 「常用文件夹」：跨账户的虚拟视图，参照 Foxmail 的常用文件夹分组 */
+function commonFolders(): FolderView[] {
+  const excludeKinds = ['trash', 'junk', 'draft'];
+  const count = (query: Parameters<typeof store.queryMessages>[0]) =>
+    store.queryMessages({ ...query, excludeKinds, limit: 100000 });
+
+  const unread = count({ unreadOnly: true });
+  const flagged = count({ flaggedOnly: true });
+  const important = count({ importance: 'high' });
+  const todoIds = new Set(
+    listTodos()
+      .map((item) => item.sourceMessageId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const todoCount = store
+    .queryMessages({ excludeKinds, limit: 100000 })
+    .items.filter((message) => todoIds.has(message.id)).length;
+
+  const base = {
+    accountId: '',
+    kind: 'virtual' as const,
+    order: -10,
+    remotePath: '',
+    parentId: undefined,
+    deletable: false,
+  };
+  return [
+    { ...base, id: 'common', name: '常用文件夹', unread: 0, total: 0 },
+    { ...base, id: 'common/unread', name: '所有未读', parentId: 'common', unread: unread.total, total: unread.total },
+    { ...base, id: 'common/flagged', name: '置顶邮件', parentId: 'common', unread: 0, total: flagged.total },
+    { ...base, id: 'common/important', name: '高优先级', parentId: 'common/labels', unread: 0, total: important.total },
+    { ...base, id: 'common/todo', name: '待办邮件', parentId: 'common/labels', unread: 0, total: todoCount },
+    { ...base, id: 'common/labels', name: '标签邮件', parentId: 'common', unread: 0, total: important.total + todoCount },
+  ];
+}
+
 function folderViews(): FolderView[] {
   const folders = store.listFolders().map((folder) => ({
     ...folder,
     unread: store.countUnread(folder.id),
     total: store.countFolder(folder.id),
   }));
-  return [...folders, ...briefFolders()];
+  return [...commonFolders(), ...folders, ...briefFolders()];
 }
 
 function folderOf(id: string) {
@@ -203,6 +258,13 @@ export function registerIpcHandlers(): void {
     if (query.folderId && query.folderId.startsWith('briefs')) {
       return { total: 0, items: [] as MessageMeta[] };
     }
+    // 常用文件夹（虚拟视图）：把 folderId 翻译成跨账户的筛选条件
+    if (query.folderId && query.folderId.startsWith('common')) {
+      const { folderId, ...rest } = query;
+      const mapped = virtualFolderQuery(folderId, rest);
+      if (!mapped) return { total: 0, items: [] as MessageMeta[] };
+      return store.queryMessages(mapped);
+    }
     return store.queryMessages(query);
   });
 
@@ -214,7 +276,16 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('messages/threads', (_event, query: MessageQuery) => {
-    const result = store.queryMessages({ ...query, limit: 2000 });
+    // 常用文件夹同样是跨账户视图，这里做一次同样的条件映射
+    const mapped =
+      query.folderId && query.folderId.startsWith('common')
+        ? (() => {
+            const { folderId, ...rest } = query;
+            return virtualFolderQuery(folderId, rest);
+          })()
+        : query;
+    if (!mapped) return { total: 0, items: [] };
+    const result = store.queryMessages({ ...mapped, limit: 2000 });
     const threads = groupThreads(result.items).slice(query.offset ?? 0, (query.offset ?? 0) + (query.limit ?? 200));
     return { total: groupThreads(result.items).length, items: threads };
   });
@@ -580,12 +651,85 @@ export function registerIpcHandlers(): void {
 
   /* ------------------------------ 在线更新 ------------------------------ */
 
+  /* ---------------------------- 程序与邮件行为 ---------------------------- */
+
+  ipcMain.handle('app/system', () => {
+    const settings = store.getSettings();
+    const client = getDefaultMailClientStatus();
+    return {
+      ...settings.app,
+      defaultMailClient: client.enabled,
+      canSetDefaultMailClient: client.supported,
+      locale: settings.locale,
+      mail: settings.mail,
+    };
+  });
+
+  ipcMain.handle('app/system/set', (_event, patch: Record<string, unknown>) => {
+    const settings = store.getSettings();
+    const nextApp = { ...settings.app, ...(patch.app as object | undefined) };
+    const nextMail = { ...settings.mail, ...(patch.mail as object | undefined) };
+    store.updateSettings({
+      app: nextApp,
+      mail: nextMail,
+      ...(patch.locale ? { locale: patch.locale as AppLocale } : {}),
+    });
+    applyAppBehavior(mainWindow);
+    return store.getSettings().app;
+  });
+
+  ipcMain.handle('app/defaultMailClient/set', async (_event, enabled: boolean) => setDefaultMailClient(enabled));
+
+  ipcMain.handle('messages/attachmentData', (_event, payload: { messageId: string; filename: string }) => {
+    try {
+      const file = store.attachmentPath(payload.messageId, payload.filename);
+      if (!fs.existsSync(file)) return { ok: false, error: '附件文件不存在（可能未下载或已被清理）' };
+      const stat = fs.statSync(file);
+      if (stat.size > 20 * 1024 * 1024) return { ok: false, error: '附件超过 20MB，预览已跳过，请直接保存到本地打开' };
+      const ext = path.extname(file).toLowerCase();
+      const imageExt: Record<string, string> = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.bmp': 'image/bmp',
+      };
+      if (imageExt[ext]) {
+        return {
+          ok: true,
+          kind: 'image',
+          mime: imageExt[ext],
+          dataUrl: `data:${imageExt[ext]};base64,${fs.readFileSync(file).toString('base64')}`,
+        };
+      }
+      if (ext === '.pdf') {
+        return {
+          ok: true,
+          kind: 'pdf',
+          mime: 'application/pdf',
+          dataUrl: `data:application/pdf;base64,${fs.readFileSync(file).toString('base64')}`,
+        };
+      }
+      if (['.txt', '.csv', '.log', '.md', '.json', '.xml', '.htm', '.html'].includes(ext)) {
+        return { ok: true, kind: 'text', text: fs.readFileSync(file, 'utf8').slice(0, 200_000) };
+      }
+      return { ok: true, kind: 'other', size: stat.size };
+    } catch (error) {
+      return { ok: false, error: (error as Error).message.slice(0, 200) };
+    }
+  });
+
   ipcMain.handle('update/state', () => getUpdateState());
   ipcMain.handle('update/check', async () => checkForUpdates());
   ipcMain.handle('update/download', async () => downloadUpdate());
-  ipcMain.handle('update/install', () => {
-    quitAndInstall(mainWindow);
-    return { ok: true };
+  ipcMain.handle('update/install', () => installUpdate());
+
+  // 便携版等无法自动安装时，直接打开发布页手动下载
+  ipcMain.handle('update/openRelease', async () => {
+    const { shell } = await import('electron');
+    await shell.openExternal(RELEASE_URL);
+    return true;
   });
 
   ipcMain.handle('dialog/pickFiles', async () => {

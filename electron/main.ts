@@ -11,11 +11,52 @@ import { registerIpcHandlers, setMainWindow, startScheduler } from './ipc';
 import { seedDemoData } from './services/demo';
 import { imapService } from './services/imap';
 import { briefScheduler } from './services/scheduler';
+import {
+  applyAppBehavior,
+  applyFontScale,
+  destroyTray,
+  ensureTray,
+  notifyNewMail,
+} from './services/system';
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 const screenshotMode = process.env.ZHIMAIL_SCREENSHOT === '1';
 
 let mainWindow: BrowserWindow | null = null;
+
+/** 已提醒过的邮件 id，避免同一封邮件反复弹窗 */
+const notifiedMessageIds = new Set<string>();
+
+/** 新邮件提醒窗口：IDLE 推送或同步结束后调用 */
+function maybeNotifyNewMail(accountId?: string): void {
+  if (!(store.getSettings().mail?.notify ?? true)) return;
+  const since = Date.now() - 5 * 60 * 1000;
+  const { items } = store.queryMessages({
+    accountId,
+    unreadOnly: true,
+    since,
+    limit: 5,
+    sortBy: 'date',
+    sortDir: 'desc',
+  });
+  const fresh = items.filter((message) => !notifiedMessageIds.has(message.id));
+  if (fresh.length === 0) return;
+  for (const message of fresh) notifiedMessageIds.add(message.id);
+
+  notifyNewMail(
+    fresh.slice(0, 3).map((message) => ({
+      id: message.id,
+      subject: message.subject || '(无主题)',
+      from: message.from[0]?.name || message.from[0]?.address || '未知发件人',
+    })),
+    (id) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      mainWindow.show();
+      mainWindow.focus();
+      mainWindow.webContents.send('mail:open', { id });
+    },
+  );
+}
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -239,6 +280,74 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
       })()`,
       waitMs: 7000,
     },
+    {
+      name: '14-system-settings',
+      script: `(() => {
+        const dialog = Array.from(document.querySelectorAll('div')).find((el) =>
+          (el.textContent || '').includes('本次更新内容'),
+        );
+        if (dialog) {
+          const closeBtn = Array.from(dialog.querySelectorAll('button')).find(
+            (item) => (item.textContent || '').trim() === '关闭',
+          );
+          if (closeBtn) closeBtn.click();
+        }
+        window.__zhimailDev?.showSettings?.('app');
+        return true;
+      })()`,
+      waitMs: 3200,
+    },
+    {
+      name: '15-common-folders',
+      script: `(() => {
+        const dialog = Array.from(document.querySelectorAll('div')).find((el) =>
+          (el.textContent || '').includes('本次更新内容'),
+        );
+        if (dialog) {
+          const closeBtn = Array.from(dialog.querySelectorAll('button')).find(
+            (item) => (item.textContent || '').trim() === '关闭',
+          );
+          if (closeBtn) closeBtn.click();
+        }
+        window.__zhimailDev?.showMail?.();
+        window.__zhimailDev?.showCommon?.('common/unread');
+        return true;
+      })()`,
+      waitMs: 2600,
+    },
+    {
+      name: '16-attachment-preview',
+      script: `(() => {
+        const closeDialog = () => {
+          const dialog = Array.from(document.querySelectorAll('div')).find((el) =>
+            (el.textContent || '').includes('本次更新内容'),
+          );
+          if (!dialog) return;
+          const btn = Array.from(dialog.querySelectorAll('button')).find(
+            (item) => (item.textContent || '').trim() === '关闭',
+          );
+          if (btn) btn.click();
+        };
+        closeDialog();
+        window.__zhimailDev?.showMail?.();
+        // 选中带附件的邮件，再点开附件预览
+        setTimeout(() => {
+          const row = Array.from(document.querySelectorAll('button, div[role="button"]')).find((el) =>
+            (el.textContent || '').includes('客户反馈：灭菌后器械包出现湿包现象'),
+          );
+          if (row) row.click();
+        }, 900);
+        setTimeout(() => {
+          const chip = Array.from(document.querySelectorAll('button')).find(
+            (el) => /KB|MB/.test(el.textContent || '') && /照片|电气|PDF/.test(el.textContent || ''),
+          );
+          if (chip) chip.click();
+        }, 2600);
+        return true;
+      })()`,
+      waitMs: 5200,
+    },
+
   ];
 
   for (const view of views) {
@@ -280,6 +389,26 @@ if (!gotLock) {
     registerIpcHandlers();
     mainWindow = createWindow();
     setMainWindow(mainWindow);
+    applyAppBehavior(mainWindow);
+
+    // 关闭主窗口时：按设置退出程序，或最小化到托盘继续收信
+    mainWindow.on('close', (event) => {
+      const quitOnClose = store.getSettings().app?.quitOnClose ?? true;
+      if (quitOnClose || (app as unknown as { isQuitting?: boolean }).isQuitting) return;
+      event.preventDefault();
+      mainWindow?.hide();
+      ensureTray(
+        () => {
+          mainWindow?.show();
+          mainWindow?.focus();
+        },
+        () => {
+          (app as unknown as { isQuitting?: boolean }).isQuitting = true;
+          destroyTray();
+          app.quit();
+        },
+      );
+    });
     mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
       if (level >= 2) console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`);
     });
@@ -316,6 +445,7 @@ if (!gotLock) {
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('mail:new', { accountId });
           }
+          maybeNotifyNewMail(accountId);
         });
       } catch (error) {
         console.warn('[main] IDLE 连接失败', account.email, (error as Error).message);
@@ -333,13 +463,17 @@ if (!gotLock) {
   });
 
   app.on('window-all-closed', () => {
+    const quitOnClose = store.getSettings().app?.quitOnClose ?? true;
+    if (!quitOnClose) return; // 最小化到托盘，保持后台收信
     void imapService.stopAll();
     briefScheduler.stop();
+    destroyTray();
     store.flush();
     if (process.platform !== 'darwin') app.quit();
   });
 
   app.on('before-quit', () => {
+    (app as unknown as { isQuitting?: boolean }).isQuitting = true;
     briefScheduler.stop();
     store.flush();
   });

@@ -13,7 +13,8 @@ export type FolderKind =
   | 'junk'
   | 'archive'
   | 'custom'
-  | 'brief';
+  | 'brief'
+  | 'virtual';
 
 export interface Folder {
   id: string;
@@ -169,6 +170,40 @@ export interface BriefScheduleSettings {
   schedules: BriefSchedule[];
 }
 
+export type AppLocale = 'system' | 'zh-CN' | 'en-US' | 'zh-TW';
+
+export interface AppBehaviorSettings {
+  autoLaunch: boolean;
+  showInTaskbar: boolean;
+  quitOnClose: boolean;
+  fontScale: 'small' | 'standard' | 'large';
+  defaultMailClient?: boolean;
+}
+
+export interface MailBehaviorSettings {
+  notify: boolean;
+  notifySound: boolean;
+  attachmentPreview: boolean;
+  listMode: 'normal' | 'conversation' | 'related';
+}
+
+export interface AppSystemState extends AppBehaviorSettings {
+  defaultMailClient: boolean;
+  canSetDefaultMailClient: boolean;
+  locale: AppLocale;
+  mail: MailBehaviorSettings;
+}
+
+export interface AttachmentDataResult {
+  ok: boolean;
+  error?: string;
+  kind?: 'image' | 'pdf' | 'text' | 'other';
+  mime?: string;
+  dataUrl?: string;
+  text?: string;
+  size?: number;
+}
+
 export interface AppSettings {
   ai: AISettings;
   brief: BriefScheduleSettings;
@@ -179,6 +214,8 @@ export interface AppSettings {
     pageSize: number;
     /** 阅读窗格操作条显示的操作 id 列表 */
     readerActions: string[];
+    /** 操作条最多显示几项，超出的收进「更多」 */
+    readerActionLimit: number;
   };
   backup: {
     autoEnabled: boolean;
@@ -188,6 +225,9 @@ export interface AppSettings {
   };
   sync: { days: number; limit: number };
   translate: { engine: 'auto' | 'llm' | 'builtin' };
+  app: AppBehaviorSettings;
+  mail: MailBehaviorSettings;
+  locale: AppLocale;
   update: {
     autoCheck: boolean;
     autoDownload: boolean;
@@ -212,8 +252,21 @@ export interface BalanceInfo {
 }
 
 export interface UpdateState {
-  phase: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error' | 'unsupported';
+  phase:
+    | 'idle'
+    | 'checking'
+    | 'available'
+    | 'not-available'
+    | 'downloading'
+    | 'downloaded'
+    | 'installing'
+    | 'error'
+    | 'unsupported';
   currentVersion: string;
+  /** installed=安装版可自动安装；portable=便携版需手动替换；dev=开发模式 */
+  installMode: 'installed' | 'portable' | 'dev';
+  canAutoInstall: boolean;
+  releaseUrl: string;
   version?: string;
   releaseNotes?: string;
   releaseDate?: string;
@@ -378,6 +431,13 @@ export interface ZhimailApi {
     }>;
     resetDataDir: () => Promise<{ dataDir: string }>;
     relaunch: () => Promise<boolean>;
+    system: () => Promise<AppSystemState>;
+    setSystem: (patch: {
+      app?: Partial<AppBehaviorSettings>;
+      mail?: Partial<MailBehaviorSettings>;
+      locale?: AppLocale;
+    }) => Promise<AppBehaviorSettings>;
+    setDefaultMailClient: (enabled: boolean) => Promise<{ ok: boolean; error?: string }>;
   };
   accounts: {
     list: () => Promise<Account[]>;
@@ -395,6 +455,7 @@ export interface ZhimailApi {
   };
   messages: {
     list: (query: MessageQuery) => Promise<{ total: number; items: MessageMeta[] }>;
+    attachmentData: (payload: { messageId: string; filename: string }) => Promise<AttachmentDataResult>;
     get: (id: string) => Promise<MessageFull | undefined>;
     thread: (threadId: string) => Promise<MessageMeta[]>;
     threads: (query: MessageQuery) => Promise<{ total: number; items: ThreadSummary[] }>;
@@ -497,7 +558,8 @@ export interface ZhimailApi {
     state: () => Promise<UpdateState>;
     check: () => Promise<UpdateState>;
     download: () => Promise<UpdateState>;
-    install: () => Promise<{ ok: boolean }>;
+    install: () => Promise<{ ok: boolean; error?: string }>;
+    openRelease: () => Promise<boolean>;
   };
   on: (channel: string, handler: (payload: unknown) => void) => () => void;
 }
@@ -517,6 +579,8 @@ declare global {
       showMail?: () => void;
       showSettings?: (tab?: string) => void;
       maximizeAIPanel?: () => void;
+    showCommon?: (id: string) => void;
+    selectSubject?: (text: string) => void;
       showAI?: () => void;
       showBriefs?: () => void;
       showTodos?: () => void;

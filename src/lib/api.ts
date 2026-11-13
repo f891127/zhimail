@@ -38,7 +38,21 @@ const emptySettings: AppSettings = {
     showSnippet: true,
     pageSize: 200,
     readerActions: [],
+    readerActionLimit: 7,
   },
+  app: {
+    autoLaunch: false,
+    showInTaskbar: true,
+    quitOnClose: true,
+    fontScale: 'standard' as const,
+  },
+  mail: {
+    notify: true,
+    notifySound: false,
+    attachmentPreview: true,
+    listMode: 'conversation' as const,
+  },
+  locale: 'system' as const,
   backup: { autoEnabled: false, directory: '', keep: 7, includeSecrets: true },
   sync: { days: 30, limit: 500 },
   translate: { engine: 'auto' },
@@ -58,12 +72,33 @@ function notAvailable(): never {
   throw new Error('当前不在桌面应用环境中，该操作不可用');
 }
 
+function mockSystemState() {
+  return {
+    autoLaunch: false,
+    showInTaskbar: true,
+    quitOnClose: true,
+    fontScale: 'standard' as const,
+    defaultMailClient: false,
+    canSetDefaultMailClient: false,
+    locale: 'system' as const,
+    mail: {
+      notify: true,
+      notifySound: false,
+      attachmentPreview: true,
+      listMode: 'conversation' as const,
+    },
+  };
+}
+
 const mockApi: ZhimailApi = {
   app: {
     info: async () => emptyInfo,
     chooseDataDir: async () => ({ canceled: true }),
     resetDataDir: async () => ({ dataDir: emptyInfo.dataDir }),
     relaunch: async () => false,
+    system: async () => mockSystemState(),
+    setSystem: async () => mockSystemState(),
+    setDefaultMailClient: async () => ({ ok: false, error: '浏览器预览模式不支持' }),
   },
   accounts: {
     list: async () => [] as Account[],
@@ -78,6 +113,7 @@ const mockApi: ZhimailApi = {
   },
   messages: {
     list: async () => ({ total: 0, items: [] as MessageMeta[] }),
+    attachmentData: async () => ({ ok: false, error: '浏览器预览模式不支持' }),
     get: async () => undefined as MessageFull | undefined,
     thread: async () => [] as MessageMeta[],
     threads: async () => ({ total: 0, items: [] as ThreadSummary[] }),
@@ -148,10 +184,18 @@ const mockApi: ZhimailApi = {
     pickFiles: async () => [],
   },
   update: {
-    state: async () => ({ phase: 'unsupported' as const, currentVersion: '1.0.0', canCheck: false }),
+    state: async () => ({
+      phase: 'unsupported' as const,
+      currentVersion: '1.0.0',
+      installMode: 'dev' as const,
+      canAutoInstall: false,
+      releaseUrl: '',
+      canCheck: false,
+    }),
     check: notAvailable,
     download: notAvailable,
     install: notAvailable,
+    openRelease: async () => false,
   },
   on: () => () => undefined,
 };
