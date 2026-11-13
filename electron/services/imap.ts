@@ -382,7 +382,7 @@ function applyRepair(parsed: ParsedMail): ParsedMail {
   return parsed;
 }
 
-function makeSnippet(text: string | undefined, html: string | undefined): string {
+export function makeSnippet(text: string | undefined, html: string | undefined): string {
   const source = (text || '')
     .replace(/\s+/g, ' ')
     .trim()

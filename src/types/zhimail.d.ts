@@ -499,6 +499,13 @@ export interface ZhimailApi {
       charset?: string;
       stillBroken?: boolean;
     }>;
+    importSource: (messageId: string) => Promise<{
+      ok: boolean;
+      canceled?: boolean;
+      error?: string;
+      body?: { text?: string; html?: string; attachments: AttachmentMeta[] };
+      charset?: string;
+    }>;
     exportSource: (messageId: string) => Promise<{
       ok: boolean;
       canceled?: boolean;

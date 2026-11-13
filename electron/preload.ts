@@ -55,6 +55,7 @@ const api = {
     remove: (ids: string[]) => invoke('messages/delete', ids),
     redecode: (payload: { messageId: string; charset?: string }) => invoke('messages/redecode', payload),
     exportSource: (messageId: string) => invoke('messages/exportSource', messageId),
+    importSource: (messageId: string) => invoke('messages/importSource', messageId),
     send: (draft: unknown) => invoke('messages/send', draft),
     saveDraft: (draft: unknown) => invoke('messages/saveDraft', draft),
   },

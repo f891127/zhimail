@@ -140,11 +140,17 @@ export function ReadingPane() {
       disabled: aiBusy,
       onClick: () => readerHandlers[action.id]?.(),
     })),
-    // 编码问题排查：把服务器上的原始邮件导出成 .eml
+    // 编码问题排查：导出原文 / 用本地 .eml 修复正文
     {
       label: '导出邮件原文（.eml）',
       onClick: () => {
         if (selectedMessage) void store.exportSource(selectedMessage.id);
+      },
+    },
+    {
+      label: '用 .eml 文件修复正文…',
+      onClick: () => {
+        if (selectedMessage) void store.importSource(selectedMessage.id);
       },
     },
   ];
@@ -441,6 +447,14 @@ export function ReadingPane() {
                     {option.label}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  disabled={store.redecoding}
+                  onClick={() => void store.importSource(selectedMessage.id)}
+                  className="rounded border border-amber-400/70 bg-white px-1.5 py-0.5 text-[11px] text-amber-900 transition-colors duration-120 hover:bg-amber-100 disabled:opacity-50"
+                >
+                  用 .eml 修复
+                </button>
                 {store.redecoding && <span className="text-amber-700">正在重新解码…</span>}
               </div>
             )}

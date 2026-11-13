@@ -24,7 +24,7 @@ import {
   testAccount,
   ensureDefaultFolders,
 } from './services/accounts';
-import { imapService, looksMojibake, repairMojibake } from './services/imap';
+import { imapService, looksMojibake, repairMojibake, makeSnippet } from './services/imap';
 import { smtpService } from './services/smtp';
 import { groupThreads } from './services/thread';
 import { runSearch } from './services/search';
@@ -276,6 +276,21 @@ async function autoReceiveTick(): Promise<void> {
   }
 }
 
+/**
+ * 重新解码诊断日志：写到数据目录下的 redecode.log，排查「点修复但没变化」这类问题。
+ * 只记长度与开头 40 字，不落完整正文。
+ */
+function writeRedeocodeLog(entry: Record<string, unknown>): void {
+  try {
+    const fs = require('node:fs') as typeof import('node:fs');
+    const path = require('node:path') as typeof import('node:path');
+    const line = `${new Date().toISOString()} ${JSON.stringify(entry)}\n`;
+    fs.appendFileSync(path.join(store.root, 'redecode.log'), line, 'utf8');
+  } catch {
+    /* 日志失败不影响主流程 */
+  }
+}
+
 export function registerIpcHandlers(): void {
   /* ------------------------------ 应用信息 ------------------------------ */
 
@@ -487,13 +502,66 @@ export function registerIpcHandlers(): void {
       if (account.demo) return { ok: false, error: '演示邮件无需重新解码' };
       try {
         const result = await imapService.redecodeMessage(account, folder, meta.uid, payload.charset);
-        if (!result) return { ok: false, error: '服务器上没有取到邮件原文' };
+        if (!result) {
+          writeRedeocodeLog({ messageId: payload.messageId, uid: meta.uid, error: '服务器上没有取到原文' });
+          return { ok: false, error: '服务器上没有取到邮件原文' };
+        }
+        writeRedeocodeLog({
+          messageId: payload.messageId,
+          uid: meta.uid,
+          folder: folder.remotePath ?? folder.name,
+          charset: result.charset,
+          textLength: result.body.text?.length ?? 0,
+          htmlLength: result.body.html?.length ?? 0,
+          sample: (result.body.text ?? '').slice(0, 40),
+          stillBroken: result.stillBroken,
+        });
         return { ok: true, body: result.body, charset: result.charset, stillBroken: result.stillBroken };
       } catch (error) {
+        writeRedeocodeLog({ messageId: payload.messageId, uid: meta.uid, error: (error as Error).message });
         return { ok: false, error: `重新解码失败：${(error as Error).message}` };
       }
     },
   );
+  ipcMain.handle('messages/importSource', async (_event, messageId: string) => {
+    const meta = store.getMessageMeta(messageId);
+    if (!meta) return { ok: false, error: '邮件已不存在' };
+    const picked = await dialog.showOpenDialog({
+      title: '选择邮件原文（.eml）用于修复正文',
+      properties: ['openFile'],
+      filters: [{ name: '邮件原文', extensions: ['eml', 'txt'] }],
+      buttonLabel: '用它修复正文',
+    });
+    if (picked.canceled || !picked.filePaths.length) return { ok: false, canceled: true };
+    try {
+      const fs = await import('node:fs');
+      const raw = fs.readFileSync(picked.filePaths[0]);
+      const { parseBestEffort } = await import('./services/imap');
+      const parsed = await parseBestEffort(raw);
+      const existing = store.getMessageBody(meta.accountId, meta.folderId, meta.uid);
+      const body = {
+        text: parsed.parsed.text ?? undefined,
+        html: typeof parsed.parsed.html === 'string' ? parsed.parsed.html : undefined,
+        attachments: existing?.attachments ?? [],
+      };
+      store.saveMessageBody(meta.accountId, meta.folderId, meta.uid, body);
+      store.patchMessage(messageId, {
+        snippet: makeSnippet(body.text, body.html),
+        subject: parsed.parsed.subject || meta.subject,
+      });
+      writeRedeocodeLog({
+        messageId,
+        uid: meta.uid,
+        charset: parsed.charset,
+        source: 'eml',
+        textLength: body.text?.length ?? 0,
+        sample: (body.text ?? '').slice(0, 40),
+      });
+      return { ok: true, body, charset: parsed.charset };
+    } catch (error) {
+      return { ok: false, error: `解析 .eml 失败：${(error as Error).message}` };
+    }
+  });
   ipcMain.handle('messages/exportSource', async (_event, messageId: string) => {
     const meta = store.getMessageMeta(messageId);
     if (!meta) return { ok: false, error: '邮件已不存在' };

@@ -157,6 +157,8 @@ interface State {
   redecodeMessage: (id: string, charset?: string) => Promise<void>;
   /** 导出邮件原文（.eml） */
   exportSource: (id: string) => Promise<void>;
+  /** 用本地 .eml 文件修复正文（服务器重取失败时的兜底） */
+  importSource: (id: string) => Promise<void>;
   /** 从待办/简报等入口按邮件 id 直接打开（会自动切到所在账户与文件夹） */
   openMessageById: (id: string) => Promise<boolean>;
   selectMessage: (id: string, modifiers?: { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean }) => Promise<void>;
@@ -627,6 +629,31 @@ export const useAppStore = create<State>((set, get) => ({
       get().pushToast({ type: 'error', title: '重新解码失败', message: (error as Error).message });
     } finally {
       set({ redecoding: false });
+    }
+  },
+
+  importSource: async (id: string) => {
+    try {
+      const result = await api.messages.importSource(id);
+      if (result.canceled) return;
+      if (!result.ok || !result.body) {
+        get().pushToast({ type: 'error', title: '用 .eml 修复失败', message: result.error });
+        return;
+      }
+      const body = result.body;
+      set((state) => ({
+        bodyVersion: state.bodyVersion + 1,
+        selectedMessage:
+          state.selectedMessage && state.selectedMessage.id === id
+            ? { ...state.selectedMessage, body }
+            : state.selectedMessage,
+        messages: state.messages.map((item) =>
+          item.id === id ? { ...item, snippet: (body.text ?? '').replace(/\s+/g, ' ').slice(0, 120) } : item,
+        ),
+      }));
+      get().pushToast({ type: 'info', title: '已用 .eml 修复正文', message: `解码方式：${result.charset ?? '自动'}` });
+    } catch (error) {
+      get().pushToast({ type: 'error', title: '用 .eml 修复失败', message: (error as Error).message });
     }
   },
 
