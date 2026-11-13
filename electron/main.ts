@@ -137,6 +137,20 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
       })()`,
       waitMs: 2200,
     },
+    {
+      // 模拟从 1.0.0 升级到当前版本后首次启动，验证「本次更新内容」自动弹出
+      name: '09-changelog',
+      script: `(() => {
+        try {
+          window.localStorage.setItem('zhimail.lastSeenVersion', '1.0.0');
+          window.location.reload();
+          return true;
+        } catch (error) {
+          return false;
+        }
+      })()`,
+      waitMs: 5200,
+    },
   ];
 
   for (const view of views) {

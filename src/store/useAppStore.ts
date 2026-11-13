@@ -120,6 +120,9 @@ interface State {
   syncProgress: SyncProgress | null;
   toasts: Toast[];
   settingsOpen: boolean;
+  changelogOpen: boolean;
+  changelogAuto: boolean;
+  changelogHighlight: string | null;
   settingsTab: 'account' | 'ai' | 'brief' | 'about';
   compose: ComposeState;
 
@@ -189,6 +192,8 @@ interface State {
   dismissToast: (id: string) => void;
   setSyncProgress: (progress: SyncProgress | null) => void;
   openSettings: (tab?: State['settingsTab']) => void;
+  openChangelog: (options?: { auto?: boolean; version?: string | null }) => void;
+  closeChangelog: () => void;
   closeSettings: () => void;
 }
 
@@ -273,6 +278,9 @@ export const useAppStore = create<State>((set, get) => ({
   syncProgress: null,
   toasts: [],
   settingsOpen: false,
+  changelogOpen: false,
+  changelogAuto: false,
+  changelogHighlight: null,
   settingsTab: 'account',
   compose: emptyCompose,
 
@@ -1000,6 +1008,13 @@ export const useAppStore = create<State>((set, get) => ({
   setSyncProgress: (progress) => set({ syncProgress: progress }),
 
   openSettings: (tab) => set({ settingsOpen: true, settingsTab: tab ?? 'account' }),
+  openChangelog: (options) =>
+    set({
+      changelogOpen: true,
+      changelogAuto: options?.auto ?? false,
+      changelogHighlight: options?.version ?? null,
+    }),
+  closeChangelog: () => set({ changelogOpen: false, changelogAuto: false }),
   closeSettings: () => set({ settingsOpen: false }),
 }));
 

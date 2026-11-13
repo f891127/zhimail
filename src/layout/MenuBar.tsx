@@ -140,6 +140,7 @@ export function MenuBar() {
     ],
     帮助: [
       { label: '检查更新…', onClick: () => void store.checkUpdate() },
+      { label: '版本更新日志', onClick: () => store.openChangelog() },
       { divider: true, label: '' },
       { label: '使用说明', onClick: () => openSettings('about') },
       { label: '关于知邮 ZhiMail', onClick: () => openSettings('about') },

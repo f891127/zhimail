@@ -751,6 +751,7 @@ export function SettingsDialog() {
                     凭据保护：{info?.strongEncryption ? '已使用系统密钥（Windows DPAPI）加密' : '当前系统不支持密钥环，使用本地编码存储'}
                   </div>
                   <div>平台：{info?.platform}</div>
+                  <div>作者：fxj</div>
                 </div>
 
                 <div>
@@ -776,6 +777,12 @@ export function SettingsDialog() {
                 </div>
 
                 <div className="flex gap-1.5">
+                  <button type="button" className="ghost-btn" onClick={() => store.openChangelog()}>
+                    查看更新日志
+                  </button>
+                  <button type="button" className="ghost-btn" onClick={() => void store.checkUpdate()}>
+                    检查更新
+                  </button>
                   <button type="button" className="ghost-btn" onClick={() => void store.resetDemo()}>
                     重置演示数据
                   </button>

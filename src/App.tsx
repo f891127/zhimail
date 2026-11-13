@@ -13,6 +13,8 @@ import { BriefCenter } from '@/features/brief/BriefCenter';
 import { TodoPanel } from '@/features/todos/TodoPanel';
 import { ComposeWindow } from '@/features/compose/ComposeWindow';
 import { SettingsDialog } from '@/features/settings/SettingsDialog';
+import { ChangelogDialog } from '@/features/changelog/ChangelogDialog';
+import { LAST_SEEN_VERSION_KEY } from '@/lib/changelog';
 import { ToastHost } from '@/components/ToastHost';
 
 function Splitter({ onDrag }: { onDrag: (deltaX: number) => void }) {
@@ -63,6 +65,28 @@ export default function App() {
     void init();
   }, [init]);
 
+  // 版本更新日志：版本号变化时首次启动自动展示本次更新内容
+  useEffect(() => {
+    if (!ready) return;
+    const version = store.info?.version;
+    if (!version) return;
+    let lastSeen: string | null = null;
+    try {
+      lastSeen = window.localStorage.getItem(LAST_SEEN_VERSION_KEY);
+    } catch {
+      lastSeen = null;
+    }
+    if (lastSeen === version) return;
+    const isFirstRun = lastSeen === null;
+    try {
+      window.localStorage.setItem(LAST_SEEN_VERSION_KEY, version);
+    } catch {
+      /* 忽略存储异常 */
+    }
+    // 首次安装不弹窗，仅在版本发生变化时提示更新内容
+    if (!isFirstRun) store.openChangelog({ auto: true, version });
+  }, [ready, store, store.info?.version]);
+
   const focusSearch = useCallback(() => {
     const input = document.querySelector<HTMLInputElement>('input[placeholder^="搜索邮件"]');
     input?.focus();
@@ -104,7 +128,8 @@ export default function App() {
         return;
       }
       if (event.key === 'Escape') {
-        if (store.compose.open) store.closeCompose();
+        if (store.changelogOpen) store.closeChangelog();
+        else if (store.compose.open) store.closeCompose();
         else if (store.settingsOpen) store.closeSettings();
         else if (aiPanelOpen) store.setAIPanel(false);
         return;
@@ -191,6 +216,7 @@ export default function App() {
 
       <ComposeWindow />
       <SettingsDialog />
+      <ChangelogDialog />
       <ToastHost />
     </div>
   );

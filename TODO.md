@@ -92,16 +92,22 @@
 - [x] 索引、正文、附件、简报、待办、设置持久化到应用数据目录，重启保留。
 - [x] 邮箱密码与 AI Key 加密存储，界面不明文回显。
 
-### 18. 在线更新（GitHub Releases）
+### 18. 版本更新日志
+- [x] `CHANGELOG.md` 作为唯一来源，客户端内置解析（`src/lib/changelog.ts`），升级后首次启动自动弹出本次更新内容。
+- [x] 「帮助 → 版本更新日志」「设置 → 关于 → 查看更新日志」可查看历史版本，当前版本带徽标。
+- [x] 检查更新面板显示新版本说明；发布流程自动把该版本说明写入 Release。
+- 证据：`src/features/changelog/ChangelogDialog.tsx`、`shots/09-changelog.png`。
+
+### 19. 在线更新（GitHub Releases）
 - [x] `electron-updater` 接入，启动 8 秒后自动检查（可关），支持手动检查、下载进度、重启安装。
 - [x] 设置页「在线更新」显示当前版本、状态徽标、进度条、更新说明与两个开关；「帮助 → 检查更新」入口。
 - [x] `electron-builder.yml` 配置 `publish: github (f891127/zhimail)`，打包生成 `latest.yml`。
 - [x] `.github/workflows/release.yml`：推送 `v*` 标签时在 windows-latest 构建 NSIS 安装包并发布 Release。
 - 证据：`electron/services/updater.ts`、`shots/06-update.png`。
 
-### 19. 构建产物与仓库
-- [x] 代码推送至 GitHub 私有仓库 https://github.com/f891127/zhimail （完整源码、README、工作流）。
-- [x] 本地产出免安装便携包 `release/ZhiMail-1.0.0-x64-portable.zip`（113MB，解压即用）。
+### 20. 构建产物与仓库
+- [x] 代码推送至 GitHub 公开仓库 https://github.com/f891127/zhimail （完整源码、README、CHANGELOG、MIT 许可证、工作流）。
+- [x] 本地产出免安装便携包 `release/ZhiMail-1.1.0-x64-portable.zip`（解压即用）。
 - [x] NSIS 安装包由 GitHub Actions 的 Windows runner 构建（本沙箱为 ARM Linux，wine32 不可用，无法本地生成 NSIS）。
 
 ## 后续可做

@@ -56,7 +56,13 @@ jobs:
       - name: 确保 Release 为已发布状态
         # electron-builder 有时会把 Release 建成草稿，草稿对客户端不可见会导致自动更新失效
         if: startsWith(github.ref, 'refs/tags/')
-        run: gh release edit "${{ github.ref_name }}" --draft=false --title "知邮 ZhiMail ${{ github.ref_name }}"
+        shell: bash
+        run: |
+          node scripts/release-notes.mjs "${{ github.ref_name }}" > release-notes.md
+          gh release edit "${{ github.ref_name }}" \
+            --draft=false \
+            --title "知邮 ZhiMail ${{ github.ref_name }}" \
+            --notes-file release-notes.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

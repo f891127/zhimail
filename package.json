@@ -1,10 +1,12 @@
 {
   "name": "zhimail",
   "productName": "ZhiMail",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "知邮 ZhiMail —— Foxmail 风格桌面邮件客户端，内置 AI 汇总、邮件简报与待办提取能力",
-  "author": "房秀杰",
+  "author": {
+    "name": "fxj"
+  },
   "license": "MIT",
   "main": "dist-electron/main.js",
   "pnpm": {
