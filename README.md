@@ -1,5 +1,11 @@
 # 知邮 ZhiMail
 
+![release](https://img.shields.io/github/v/release/f891127/zhimail?label=release)
+![license](https://img.shields.io/github/license/f891127/zhimail)
+![platform](https://img.shields.io/badge/platform-Windows%20x64-1f6fd0)
+![downloads](https://img.shields.io/github/downloads/f891127/zhimail/total)
+![build](https://github.com/f891127/zhimail/actions/workflows/release.yml/badge.svg)
+
 Foxmail 风格的 Windows 桌面邮件客户端，内置 AI 汇总、简报与待办能力。使用 Electron + React + TypeScript 构建，邮件与设置全部保存在本机，AI 只连接你自己配置的大模型接口。
 
 ![主界面](shots/01-mail.png)
@@ -131,7 +137,8 @@ scripts/
 
 - 安装包（NSIS，中文安装界面、可选安装目录、桌面与开始菜单快捷方式）：GitHub Release `v1.0.0` 的 `ZhiMail-Setup-1.0.0-x64.exe`（约 81MB）。
 - 免安装版：`ZhiMail-1.0.0-x64-portable.zip`，解压后运行 `ZhiMail.exe`。
-- 发布页：https://github.com/f891127/zhimail/releases/tag/v1.0.0
+- 发布页：https://github.com/f891127/zhimail/releases/latest
+- 仓库与 Releases 均为公开，客户端在线更新无需任何 Token，开箱即可检查并下载新版本。
 
 ## 在线更新与发布
 
