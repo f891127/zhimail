@@ -354,7 +354,12 @@ export function FolderTree() {
                 <div className="relative ml-[25px] mt-0.5 pl-1.5">
                   <span
                     aria-hidden
-                    className="pointer-events-none absolute bottom-1.5 left-0 top-1.5 w-px rounded-full bg-gradient-to-b from-black/[0.03] via-black/[0.13] to-transparent"
+                    className="pointer-events-none absolute bottom-2 left-0 top-2 w-px rounded-full"
+                    style={{
+                      // 层级引导线：顶部淡入、中段最深、底部渐隐，避免整条实线的生硬感
+                      backgroundImage:
+                        'linear-gradient(to bottom, rgba(17,24,39,0) 0%, rgba(17,24,39,0.18) 16%, rgba(17,24,39,0.22) 52%, rgba(17,24,39,0.08) 90%, rgba(17,24,39,0) 100%)',
+                    }}
                   />
                   {accountFolders.map((folder) => (
                     <FolderRow

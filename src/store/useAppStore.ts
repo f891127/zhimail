@@ -5,6 +5,7 @@ import { resolveLocale, translate, type Locale } from '@/lib/i18n';
 import { api } from '@/lib/api';
 import { htmlToPlain } from '@/lib/markdown';
 import { dateOnly, fullTime } from '@/lib/format';
+import { applySkin } from '@/lib/skin';
 import type {
   Account,
   AccountInput,
@@ -434,7 +435,18 @@ export const useAppStore = create<State>((set, get) => ({
 
     // 截图与调试钩子
     window.__zhimailDev = {
-      showMail: () => set({ view: 'mail', aiPanelOpen: false }),
+      showMail: () => {
+        // 截图时固定回默认皮肤，避免上一次视图切换留下的皮肤影响主界面
+        const settings = get().settings;
+        if (settings && settings.ui.skin !== 'default') {
+          // 先同步切回默认皮肤（本地状态 + DOM 立即生效），再持久化，避免截图抓到上一个皮肤
+          const nextUi = { ...settings.ui, skin: 'default' as const };
+          set({ settings: { ...settings, ui: nextUi } });
+          applySkin('default');
+          void get().updateSettings({ ui: nextUi });
+        }
+        set({ view: 'mail', aiPanelOpen: false });
+      },
       showAI: () => {
         set({ view: 'mail', aiPanelOpen: true, aiTab: 'analysis' });
         void (async () => {
