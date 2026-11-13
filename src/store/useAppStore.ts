@@ -217,6 +217,10 @@ interface State {
   closeSettings: () => void;
 }
 
+/** 余额自动刷新的定时器与焦点监听只注册一次 */
+let balanceTimer: number | null = null;
+let focusBound = false;
+
 const emptyCompose: ComposeState = {
   open: false,
   mode: 'new',
@@ -313,6 +317,18 @@ export const useAppStore = create<State>((set, get) => ({
   init: async () => {
     // 状态栏余额：配置了 API Key 时后台拉取，不阻塞界面
     void get().refreshBalance();
+    // 余额自动刷新：每 5 分钟一次；窗口重新获得焦点时也刷新一次（避免长期显示旧数字）
+    if (!balanceTimer) {
+      balanceTimer = window.setInterval(() => {
+        if (get().settings?.ai.hasApiKey) void get().refreshBalance(true);
+      }, 5 * 60_000);
+    }
+    if (!focusBound) {
+      focusBound = true;
+      window.addEventListener('focus', () => {
+        if (get().settings?.ai.hasApiKey) void get().refreshBalance(true);
+      });
+    }
     const [info, accounts, folders, settings] = await Promise.all([
       api.app.info(),
       api.accounts.list(),
@@ -694,6 +710,10 @@ export const useAppStore = create<State>((set, get) => ({
 
   updateSettings: async (patch) => {
     const settings = await api.settings.update(patch);
+    // 改了 AI 配置（Key / 地址 / 服务商）后立刻重新查一次余额
+    if ('ai' in patch || 'aiApiKey' in (patch as Record<string, unknown>)) {
+      void get().refreshBalance(true);
+    }
     set({
       settings,
       locale: resolveLocale(settings.locale, navigator.language),
@@ -745,6 +765,7 @@ export const useAppStore = create<State>((set, get) => ({
       }
     } finally {
       set({ aiBusy: false, aiProgress: null });
+      void get().refreshBalance(true);
     }
   },
 
@@ -766,6 +787,7 @@ export const useAppStore = create<State>((set, get) => ({
       }
     } finally {
       set({ aiBusy: false, aiProgress: null });
+      void get().refreshBalance(true);
     }
   },
 
@@ -787,6 +809,7 @@ export const useAppStore = create<State>((set, get) => ({
       }
     } finally {
       set({ aiBusy: false, aiProgress: null });
+      void get().refreshBalance(true);
     }
   },
 
@@ -813,6 +836,7 @@ export const useAppStore = create<State>((set, get) => ({
       }
     } finally {
       set({ aiBusy: false, aiProgress: null });
+      void get().refreshBalance(true);
     }
   },
 
@@ -855,6 +879,7 @@ export const useAppStore = create<State>((set, get) => ({
       }
     } finally {
       set({ aiBusy: false, aiProgress: null });
+      void get().refreshBalance(true);
     }
   },
 
@@ -886,6 +911,7 @@ export const useAppStore = create<State>((set, get) => ({
       }
     } finally {
       set({ aiBusy: false, aiProgress: null });
+      void get().refreshBalance(true);
     }
   },
 
@@ -951,6 +977,7 @@ export const useAppStore = create<State>((set, get) => ({
       }
     } finally {
       set({ aiBusy: false, aiProgress: null });
+      void get().refreshBalance(true);
     }
   },
 
@@ -970,6 +997,7 @@ export const useAppStore = create<State>((set, get) => ({
       }
     } finally {
       set({ aiBusy: false, aiProgress: null });
+      void get().refreshBalance(true);
     }
   },
 
@@ -988,6 +1016,7 @@ export const useAppStore = create<State>((set, get) => ({
       return null;
     } finally {
       set({ aiBusy: false, aiProgress: null });
+      void get().refreshBalance(true);
     }
   },
 
