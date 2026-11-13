@@ -167,3 +167,11 @@ scripts/
 - 自动简报依赖应用运行，不注册系统级计划任务（可在后续版本改为 Windows 任务计划）。
 - 未做代码签名，首次运行 Windows SmartScreen 可能提示未知发布者。
 - 本地开发环境为 ARM Linux，NSIS 安装包需在 Windows 或 GitHub Actions 上构建；本仓库已配好工作流。
+
+### 附件预览
+- PDF 由内置 pdf.js 渲染（翻页、缩放），不依赖系统阅读器；Word / Excel / PPT / 图片 / 文本各有对应预览
+- 附件上右键可「另存为」，双击直接调用系统默认程序打开
+
+### 更新源自检
+- 「设置 → 在线更新 → 测试」会真实请求 `<更新源>/latest.yml`，回显版本号、耗时与安装包是否可下载
+- GitHub 官方、镜像前缀（如 ghproxy）、`releases/latest`、`releases/tag/vX.Y.Z` 几种写法都能自动规范化
