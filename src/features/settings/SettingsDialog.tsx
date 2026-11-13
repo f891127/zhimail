@@ -747,7 +747,38 @@ export function SettingsDialog() {
                     </div>
                     <div>
                       <label className="field-label">同步最近天数</label>
-                      <input type="number" value={form.syncDays} onChange={(e) => setForm({ ...form, syncDays: Number(e.target.value) })} className="field" />
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={form.syncDays === 0 ? '' : String(form.syncDays)}
+                          onChange={(e) => {
+                            // 允许自由输入（含清空），不在这里做数值限制，避免打字被打断
+                            const raw = e.target.value.replace(/[^0-9]/g, '').slice(0, 5);
+                            setForm({ ...form, syncDays: raw === '' ? 0 : Number(raw) });
+                          }}
+                          onBlur={() => {
+                            const days = Math.min(3650, Math.max(1, Number(form.syncDays) || 30));
+                            setForm({ ...form, syncDays: days });
+                          }}
+                          className="field w-24"
+                          placeholder="30"
+                        />
+                        <span className="text-[11px] text-shell-sub">天</span>
+                        <div className="ml-1 flex flex-wrap gap-1">
+                          {[7, 30, 90, 180, 365].map((days) => (
+                            <button
+                              key={days}
+                              type="button"
+                              className={Number(form.syncDays) === days ? 'primary-btn px-2 py-[3px]' : 'ghost-btn px-2 py-[3px]'}
+                              onClick={() => setForm({ ...form, syncDays: days })}
+                            >
+                              {days}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <p className="mt-1 text-[10px] leading-4 text-shell-faint">可直接输入 1–3650 的任意天数</p>
                     </div>
                   </div>
 

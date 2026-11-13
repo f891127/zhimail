@@ -50,6 +50,7 @@ export function MenuBar() {
   const menus: Record<string, MenuItem[]> = {
     文件: [
       { label: tt('新建邮件'), shortcut: 'Ctrl+N', onClick: () => openCompose() },
+      { label: tt('新建邮箱账户…'), onClick: () => openSettings('account') },
       { divider: true, label: tt('') },
       { label: tt('立即同步'), shortcut: 'F5', onClick: () => void syncNow() },
       { label: tt('重置演示数据'), onClick: () => void store.resetDemo() },

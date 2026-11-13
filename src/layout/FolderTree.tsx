@@ -406,6 +406,16 @@ export function FolderTree() {
         </div>
       </div>
 
+      <div className="px-2 pb-1">
+        <button
+          type="button"
+          onClick={() => openSettings('account')}
+          className="flex h-[26px] w-full items-center justify-center gap-1 rounded border border-dashed border-shell-line text-[11px] text-shell-sub transition-colors duration-120 hover:border-brand-300 hover:text-brand-600"
+        >
+          <Icon name="plus" size={12} />
+          新建邮箱账户
+        </button>
+      </div>
       <div className="shrink-0 border-t border-shell-line px-2 py-2">
         <button
           type="button"
