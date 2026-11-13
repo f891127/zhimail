@@ -179,29 +179,51 @@ function toBase64Body(buffer: Buffer): string {
  * 逐个 MIME 分段纠正正文编码：把每段 text/* 正文按「最像正常中文」的编码解一次，
  * 再统一改写成 UTF-8 + base64。这样一封邮件里不同分段用不同编码也不会互相干扰。
  */
+/**
+ * 把邮件里所有文本分段统一转成 UTF-8 + base64，交给 mailparser 时就不会再依赖它的编码猜测。
+ * 支持任意层级的 multipart 嵌套（典型邮件是 mixed → alternative → text/plain + text/html）。
+ */
 export function normalizeMessageEncodings(source: Buffer): Buffer {
   const raw = source.toString('latin1');
-  const boundaryMatch = /boundary\s*=\s*"?([^";\r\n]+)"?/i.exec(raw.slice(0, raw.indexOf('\r\n\r\n') >= 0 ? raw.indexOf('\r\n\r\n') : raw.length));
-  const segments = boundaryMatch ? raw.split(`--${boundaryMatch[1]}`) : [];
-  if (!boundaryMatch || segments.length < 3) {
-    const sep = raw.indexOf('\r\n\r\n');
-    if (sep < 0) return source;
-    const fixed = normalizePart(raw.slice(0, sep), raw.slice(sep + 4));
-    if (!fixed) return source;
-    return Buffer.from(fixed, 'latin1');
+  let out = raw;
+  try {
+    out = normalizeEntity(raw, 0);
+  } catch {
+    out = raw;
   }
-  const boundary = boundaryMatch[1];
-  const out = segments.map((segment) => {
-    if (!segment.includes(':')) return segment;
-    const sep = segment.indexOf('\r\n\r\n');
-    if (sep < 0) return segment;
-    const fixed = normalizePart(segment.slice(0, sep), segment.slice(sep + 4));
-    return fixed ?? segment;
-  });
-  return Buffer.from(out.join(`--${boundary}`), 'latin1');
+  return out === raw ? source : Buffer.from(out, 'latin1');
 }
 
-/** 纠正单个分段；不需要改动时返回 undefined */
+function normalizeEntity(raw: string, depth: number): string {
+  if (depth > 8 || !raw) return raw;
+  const crlfSep = raw.indexOf('\r\n\r\n');
+  const lfSep = raw.indexOf('\n\n');
+  const splitAt = crlfSep >= 0 ? crlfSep : lfSep;
+  if (splitAt < 0) return raw;
+  const bodyOffset = crlfSep >= 0 ? 4 : 2;
+  const headers = raw.slice(0, splitAt);
+  const body = raw.slice(splitAt + bodyOffset);
+  const contentType = /content-type:\s*([^;\r\n]+)/i.exec(headers)?.[1]?.toLowerCase().trim() ?? '';
+  const boundary = /boundary\s*=\s*"?([^";\r\n]+)"?/i.exec(headers)?.[1];
+
+  // 多段：逐段递归，子段自己的 headers 决定它是不是文本
+  if (contentType.startsWith('multipart/') && boundary) {
+    const parts = body.split(`--${boundary}`);
+    if (parts.length < 2) return raw;
+    const rebuilt = parts.map((part, index) => {
+      if (index === 0) return part; // 前导说明
+      if (part.startsWith('--')) return part; // 结束标记
+      const trimmed = part.replace(/^\r?\n/, '');
+      const lead = part.slice(0, part.length - trimmed.length);
+      return lead + normalizeEntity(trimmed, depth + 1);
+    });
+    return `${headers}\r\n\r\n${rebuilt.join(`--${boundary}`)}`;
+  }
+
+  const fixed = normalizePart(headers, body);
+  return fixed ?? raw;
+}
+
 function normalizePart(headers: string, body: string): string | undefined {
   if (!/content-type:\s*text\//i.test(headers)) return undefined;
   const cteMatch = /content-transfer-encoding:\s*([\w-]+)/i.exec(headers);
