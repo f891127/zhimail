@@ -75,17 +75,17 @@ export const READER_ACTIONS: ReaderActionDef[] = [
 
 export const READER_ACTION_GROUPS: ReaderActionGroup[] = ['常用操作', 'AI 能力', '翻译', '待办'];
 
-/** 默认展示：与原操作条一致 */
+/** 默认展示：翻译与摘要放在前 7 项内，避免被收进「更多」 */
 export const DEFAULT_READER_ACTIONS = [
   'reply',
   'replyAll',
   'forward',
   'summarize',
-  'threadSummary',
-  'replies',
-  'triage',
   'translateZh',
   'translateEn',
+  'triage',
+  'threadSummary',
+  'replies',
   'todos',
 ];
 

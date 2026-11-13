@@ -3,7 +3,7 @@
 import { app, BrowserWindow, Menu, shell, nativeTheme } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
-import { initUpdater, onUpdateState } from './services/updater';
+import { initUpdater, isInstallingUpdate, onUpdateState } from './services/updater';
 import { store } from './services/store';
 import { resolveDataDir } from './services/location';
 import { maybeAutoBackup } from './services/backup';
@@ -364,6 +364,10 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
   }
   app.quit();
 }
+// Windows 任务栏分组标识：必须与安装包快捷方式的 AppUserModel.ID 一致，
+// 否则同一程序会显示成两个图标
+if (process.platform === 'win32') app.setAppUserModelId('com.zhimail.desktop');
+
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
@@ -377,7 +381,6 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     nativeTheme.themeSource = 'light';
-    app.setAppUserModelId('com.zhimail.desktop');
 
     // 数据目录可由用户在设置中修改，位置记录在 userData 下，启动时解析
     store.init(resolveDataDir());
@@ -394,7 +397,8 @@ if (!gotLock) {
     // 关闭主窗口时：按设置退出程序，或最小化到托盘继续收信
     mainWindow.on('close', (event) => {
       const quitOnClose = store.getSettings().app?.quitOnClose ?? true;
-      if (quitOnClose || (app as unknown as { isQuitting?: boolean }).isQuitting) return;
+      // 安装更新时必须放行关闭，否则安装程序会一直等待进程退出
+      if (quitOnClose || isInstallingUpdate() || (app as unknown as { isQuitting?: boolean }).isQuitting) return;
       event.preventDefault();
       mainWindow?.hide();
       ensureTray(
@@ -464,6 +468,15 @@ if (!gotLock) {
 
   app.on('window-all-closed', () => {
     const quitOnClose = store.getSettings().app?.quitOnClose ?? true;
+    if (isInstallingUpdate()) {
+      // 安装更新：直接退出，把控制权交给安装程序
+      void imapService.stopAll();
+      briefScheduler.stop();
+      destroyTray();
+      store.flush();
+      app.quit();
+      return;
+    }
     if (!quitOnClose) return; // 最小化到托盘，保持后台收信
     void imapService.stopAll();
     briefScheduler.stop();

@@ -195,6 +195,15 @@ export function ReadingPane() {
 
         {/* 操作条：统一靠右排列，显示哪些操作、最多几项均可在「设置 → 界面」中配置 */}
         <div className="mt-2 flex flex-wrap items-center justify-end gap-1 border-t border-shell-lineSoft py-1.5">
+          {visibleActions.length === 0 && overflowActions.length === 0 && (
+            <button
+              type="button"
+              className="text-[11px] text-shell-faint hover:text-brand-600"
+              onClick={() => store.openSettings('ui')}
+            >
+              操作条尚未配置，点击前往「设置 → 界面」添加常用操作
+            </button>
+          )}
           {visibleActions.map((action) => (
             <button
               key={action.id}

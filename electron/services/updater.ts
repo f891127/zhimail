@@ -3,7 +3,9 @@
  * 支持自动检查、手动检查、自动/手动下载，下载完成后重启安装。
  */
 
-import { app } from 'electron';
+import { app, shell } from 'electron';
+import fs from 'node:fs';
+import path from 'node:path';
 import { autoUpdater } from 'electron-updater';
 import { store } from './store';
 
@@ -215,6 +217,45 @@ export async function downloadUpdate(): Promise<UpdateState> {
  * - 便携版：无法替换正在运行的程序文件，返回失败并提示手动下载
  * 注意：不要在调用前销毁窗口，否则进程可能先退出，安装器根本没机会启动。
  */
+/** 是否正在执行安装（用于放行窗口关闭，避免安装被拦截） */
+let installing = false;
+export function isInstallingUpdate(): boolean {
+  return installing;
+}
+
+/** 找到已下载的安装包（electron-updater 的 pending 缓存目录） */
+export function findDownloadedInstaller(): string | null {
+  const roots = [
+    path.join(app.getPath('userData'), '..', `${app.name}-updater`, 'pending'),
+    path.join(app.getPath('appData'), `${app.name}-updater`, 'pending'),
+    path.join(app.getPath('temp'), `${app.name}-updater`),
+  ];
+  let newest: { file: string; mtime: number } | null = null;
+  for (const root of roots) {
+    try {
+      if (!fs.existsSync(root)) continue;
+      for (const entry of fs.readdirSync(root)) {
+        if (!/\.(exe|msi|zip|dmg|AppImage)$/i.test(entry)) continue;
+        const file = path.join(root, entry);
+        const mtime = fs.statSync(file).mtimeMs;
+        if (!newest || mtime > newest.mtime) newest = { file, mtime };
+      }
+    } catch {
+      /* 忽略单个目录的异常 */
+    }
+  }
+  return newest?.file ?? null;
+}
+
+/** 手动运行已下载的安装包：作为自动安装失败时的兜底（安装向导有完整进度） */
+export async function openDownloadedInstaller(): Promise<{ ok: boolean; path?: string; error?: string }> {
+  const file = findDownloadedInstaller();
+  if (!file) return { ok: false, error: '没有找到已下载的安装包，请先点击「下载更新」' };
+  const error = await shell.openPath(file);
+  if (error) return { ok: false, path: file, error };
+  return { ok: true, path: file };
+}
+
 export function installUpdate(): { ok: boolean; error?: string } {
   if (!app.isPackaged) {
     setState({ phase: 'unsupported', error: '开发模式无法安装更新' });
@@ -226,24 +267,30 @@ export function installUpdate(): { ok: boolean; error?: string } {
     return { ok: false, error };
   }
 
+  installing = true;
   setState({ phase: 'installing', error: undefined });
 
-  // 兜底：若 25 秒后进程仍在运行，说明安装器没有启动，给出提示而不是无声无息
+  // 先让界面把安装遮罩画出来，再退出进程启动安装程序（否则窗口会先消失，用户看不到任何反馈）
+  setTimeout(() => {
+    try {
+      autoUpdater.quitAndInstall(true, true);
+    } catch (error) {
+      installing = false;
+      const message = String((error as Error).message).slice(0, 300);
+      setState({ phase: 'downloaded', error: `启动安装失败：${message}` });
+    }
+  }, 1200);
+
+  // 兜底：30 秒后进程仍在运行，说明安装器没有接管，给出可操作的提示
   const timer = setTimeout(() => {
+    if (!installing) return;
+    installing = false;
     setState({
       phase: 'downloaded',
-      error: '安装程序未能启动。请关闭应用后手动运行已下载的安装包，或重新点击「立即重启并安装」。',
+      error: '安装程序未能启动。可点击「手动运行安装包」用安装向导完成升级，或关闭应用后手动运行下载的安装包。',
     });
-  }, 25_000);
+  }, 30_000);
   if (typeof timer.unref === 'function') timer.unref();
 
-  try {
-    autoUpdater.quitAndInstall(true, true);
-  } catch (error) {
-    clearTimeout(timer);
-    const message = String((error as Error).message).slice(0, 300);
-    setState({ phase: 'downloaded', error: `启动安装失败：${message}` });
-    return { ok: false, error: message };
-  }
   return { ok: true };
 }

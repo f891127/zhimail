@@ -177,6 +177,7 @@ interface State {
   checkUpdate: () => Promise<void>;
   downloadUpdate: () => Promise<void>;
   installUpdate: () => Promise<void>;
+  openDownloadedInstaller: () => Promise<void>;
 
   runSummarize: (messageId?: string) => Promise<void>;
   runThreadSummary: (threadId?: string) => Promise<void>;
@@ -910,7 +911,28 @@ export const useAppStore = create<State>((set, get) => ({
   },
 
   installUpdate: async () => {
-    await api.update.install();
+    // 先在本地切到「安装中」，避免主进程退出过快导致遮罩来不及显示
+    const current = get().updateState;
+    if (current) set({ updateState: { ...current, phase: 'installing', error: undefined } });
+    const result = await api.update.install();
+    if (!result.ok) {
+      set({ updateState: current ?? null });
+      get().pushToast({
+        type: 'error',
+        title: '无法自动安装更新',
+        message: result.error ?? '请使用「手动运行安装包」完成升级',
+      });
+    }
+  },
+
+  /** 手动运行已下载的安装包（自动安装失败时的兜底） */
+  openDownloadedInstaller: async () => {
+    const result = await api.update.openInstaller();
+    get().pushToast({
+      type: result.ok ? 'info' : 'error',
+      title: result.ok ? '已启动安装向导' : '未找到安装包',
+      message: result.ok ? '按向导完成后会自动打开新版本' : (result.error ?? '请先下载更新'),
+    });
   },
 
   runTriage: async (messageId) => {

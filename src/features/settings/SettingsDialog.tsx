@@ -436,9 +436,21 @@ export function SettingsDialog() {
 
   /* ------------------------ 界面设置 ------------------------ */
 
-  const saveUISettings = async (patch: Partial<AppSettings['ui']>) => {
+  /** 调整操作条顺序：只影响展示顺序，不改勾选状态 */
+  const moveReaderAction = async (id: string, delta: number) => {
+    if (!settings) return;
+    const list = [...(settings.ui.readerActions ?? [])];
+    const index = list.indexOf(id);
+    const target = index + delta;
+    if (index < 0 || target < 0 || target >= list.length) return;
+    [list[index], list[target]] = [list[target], list[index]];
+    await store.updateSettings({ ui: { ...settings.ui, readerActions: list } });
+  };
+
+  const saveUISettings = async (patch: Partial<AppSettings['ui']>, hint = '设置已保存并即时生效') => {
     if (!settings) return;
     await store.updateSettings({ ui: { ...settings.ui, ...patch } });
+    store.pushToast({ type: 'success', title: hint, message: '无需点击保存，阅读窗格操作条已同步更新' });
   };
 
   /* ------------------------ 备份与恢复 ------------------------ */
@@ -1045,8 +1057,9 @@ export function SettingsDialog() {
             {tab === 'ui' && settings && (
               <div className="space-y-3">
                 <div className="text-[11px] leading-5 text-shell-sub">
-                  勾选后这些操作会出现在阅读窗格邮件标题下方的操作条上，勾选顺序即展示顺序；超过 7 个时，多出的部分收进「更多」菜单。
-                  与「工具」菜单中的功能一一对应。
+                  勾选后这些操作会出现在阅读窗格邮件标题下方的操作条上，勾选顺序即展示顺序；未勾选的操作不会显示。
+                  超过上限（默认 7 个）的部分收进「更多」菜单，与「工具」菜单中的功能一一对应。
+                  <span className="ml-1 text-brand-600">勾选即时生效并自动保存，无需点击保存按钮。</span>
                 </div>
 
                 {READER_ACTION_GROUPS.map((group) => (
@@ -1056,23 +1069,48 @@ export function SettingsDialog() {
                       {READER_ACTIONS.filter((action) => action.group === group).map((action) => {
                         const selected = (settings.ui.readerActions ?? []).includes(action.id);
                         return (
-                          <label key={action.id} className="flex cursor-pointer items-center gap-2 text-[11px] text-shell-text">
-                            <input
-                              type="checkbox"
-                              checked={selected}
-                              onChange={() =>
-                                void saveUISettings({
-                                  readerActions: selected
-                                    ? (settings.ui.readerActions ?? []).filter((id) => id !== action.id)
-                                    : [...(settings.ui.readerActions ?? []), action.id],
-                                })
-                              }
-                              className="h-3.5 w-3.5 accent-brand-500"
-                            />
-                            <Icon name={action.icon} size={12} className={action.brand ? 'text-brand-500' : 'text-shell-sub'} />
-                            <span>{action.label}</span>
-                            <span className="truncate text-[10px] text-shell-faint">{action.title}</span>
-                          </label>
+                          <div
+                            key={action.id}
+                            className="flex items-center gap-2 text-[11px] text-shell-text"
+                          >
+                            <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={() =>
+                                  void saveUISettings({
+                                    readerActions: selected
+                                      ? (settings.ui.readerActions ?? []).filter((id) => id !== action.id)
+                                      : [...(settings.ui.readerActions ?? []), action.id],
+                                  })
+                                }
+                                className="h-3.5 w-3.5 accent-brand-500"
+                              />
+                              <Icon name={action.icon} size={12} className={action.brand ? 'text-brand-500' : 'text-shell-sub'} />
+                              <span>{action.label}</span>
+                              <span className="truncate text-[10px] text-shell-faint">{action.title}</span>
+                            </label>
+                            {selected && (
+                              <span className="flex shrink-0 items-center">
+                                <button
+                                  type="button"
+                                  className="rounded px-0.5 text-shell-faint hover:bg-black/[0.06] hover:text-brand-600"
+                                  title="在操作条上往前挪"
+                                  onClick={() => void moveReaderAction(action.id, -1)}
+                                >
+                                  <Icon name="chevron-right" size={11} className="rotate-180" />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded px-0.5 text-shell-faint hover:bg-black/[0.06] hover:text-brand-600"
+                                  title="在操作条上往后挪"
+                                  onClick={() => void moveReaderAction(action.id, 1)}
+                                >
+                                  <Icon name="chevron-right" size={11} />
+                                </button>
+                              </span>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
@@ -1329,6 +1367,17 @@ export function SettingsDialog() {
                     <button type="button" className="primary-btn" onClick={() => void store.installUpdate()}>
                       <Icon name="check-circle" size={12} />
                       立即重启并安装
+                    </button>
+                  )}
+                  {updateState?.phase === 'downloaded' && updateState.canAutoInstall && updateState.error && (
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={() => void store.openDownloadedInstaller()}
+                      title="用安装向导手动完成升级，安装过程有完整进度"
+                    >
+                      <Icon name="external" size={12} />
+                      手动运行安装包
                     </button>
                   )}
                   {updateState?.phase === 'downloaded' && !updateState.canAutoInstall && (

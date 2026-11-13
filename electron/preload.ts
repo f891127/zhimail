@@ -115,6 +115,7 @@ const api = {
     check: () => invoke('update/check'),
     download: () => invoke('update/download'),
     install: () => invoke('update/install'),
+    openInstaller: () => invoke('update/openInstaller'),
     openRelease: () => invoke('update/openRelease'),
   },
   on: (channel: string, handler: (payload: unknown) => void) => {

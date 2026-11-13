@@ -559,6 +559,7 @@ export interface ZhimailApi {
     check: () => Promise<UpdateState>;
     download: () => Promise<UpdateState>;
     install: () => Promise<{ ok: boolean; error?: string }>;
+    openInstaller: () => Promise<{ ok: boolean; path?: string; error?: string }>;
     openRelease: () => Promise<boolean>;
   };
   on: (channel: string, handler: (payload: unknown) => void) => () => void;

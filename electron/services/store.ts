@@ -56,11 +56,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
       'replyAll',
       'forward',
       'summarize',
-      'threadSummary',
-      'replies',
-      'triage',
       'translateZh',
       'translateEn',
+      'triage',
+      'threadSummary',
+      'replies',
       'todos',
     ],
     readerActionLimit: 7,
@@ -178,6 +178,20 @@ function safeFolderSegment(value: string): string {
   return value.replace(/[^A-Za-z0-9_.@-]/g, '_');
 }
 
+/** 1.2.1 及更早版本的默认操作条顺序（翻译排在后面，容易被「更多」隐藏） */
+const LEGACY_READER_ACTIONS = [
+  'reply',
+  'replyAll',
+  'forward',
+  'summarize',
+  'threadSummary',
+  'replies',
+  'triage',
+  'translateZh',
+  'translateEn',
+  'todos',
+];
+
 export class Store {
   private dataDir = '';
   private state: PersistState = emptyState();
@@ -212,6 +226,15 @@ export class Store {
           backup: { ...DEFAULT_SETTINGS.backup, ...parsed.settings?.backup },
           update: { ...DEFAULT_SETTINGS.update, ...parsed.settings?.update },
         };
+        // 旧版默认顺序（用户未自定义过）升级为把翻译前置的新默认，避免翻译被「更多」隐藏
+        if (
+          JSON.stringify(this.state.settings.ui?.readerActions ?? []) === JSON.stringify(LEGACY_READER_ACTIONS)
+        ) {
+          this.state.settings.ui = {
+            ...this.state.settings.ui,
+            readerActions: [...DEFAULT_SETTINGS.ui.readerActions],
+          };
+        }
       } catch (error) {
         console.error('[store] state.json 解析失败，使用空状态重建', error);
         this.state = emptyState();

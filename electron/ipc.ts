@@ -38,6 +38,7 @@ import {
   downloadUpdate,
   getUpdateState,
   installUpdate,
+  openDownloadedInstaller,
   RELEASE_URL,
 } from './services/updater';
 import {
@@ -724,6 +725,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('update/check', async () => checkForUpdates());
   ipcMain.handle('update/download', async () => downloadUpdate());
   ipcMain.handle('update/install', () => installUpdate());
+  ipcMain.handle('update/openInstaller', () => openDownloadedInstaller());
 
   // 便携版等无法自动安装时，直接打开发布页手动下载
   ipcMain.handle('update/openRelease', async () => {

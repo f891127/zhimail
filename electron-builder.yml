@@ -60,6 +60,8 @@ nsis:
   deleteAppDataOnUninstall: false
   runAfterFinish: true
   differentialPackage: true
+  # 安装时清理旧版本快捷方式（见 build/installer.nsh）
+  include: build/installer.nsh
 
 portable:
   artifactName: ZhiMail-Portable-${version}-x64.${ext}
