@@ -251,11 +251,13 @@ export function SettingsDialog() {
   // 数据目录占用
   const [dataSize, setDataSize] = useState<{ bytes: number; files: number } | null>(null);
   const [sizeLoading, setSizeLoading] = useState(false);
-  const loadDataSize = async () => {
+  const loadDataSize = async (force = false) => {
     setSizeLoading(true);
     try {
-      const result = await api.app.dataSize();
+      const result = await api.app.dataSize(force ? { force: true } : undefined);
       setDataSize({ bytes: result.bytes, files: result.files });
+    } catch (error) {
+      store.pushToast({ type: 'error', title: '统计占用空间失败', message: (error as Error).message });
     } finally {
       setSizeLoading(false);
     }
@@ -1443,7 +1445,7 @@ export function SettingsDialog() {
                       <button
                         type="button"
                         className="ml-auto text-[11px] text-brand-600 hover:underline"
-                        onClick={() => void loadDataSize()}
+                        onClick={() => void loadDataSize(true)}
                       >
                         {sizeLoading ? '统计中…' : '刷新'}
                       </button>
@@ -1783,7 +1785,7 @@ export function SettingsDialog() {
             {tab === 'about' && (
               <div className="space-y-3 text-xs leading-6 text-shell-text">
                 <div>
-                  <div className="text-base font-semibold text-brand-800">知邮 ZhiMail v{info?.version ?? '1.0.0'}</div>
+                  <div className="text-base font-semibold text-brand-800">智邮 ZhiYou v{info?.version ?? '1.0.0'}</div>
                   <div className="text-[11px] text-shell-sub">
                     Foxmail 风格的桌面邮件客户端，内置 AI 汇总、简报与待办能力。
                   </div>

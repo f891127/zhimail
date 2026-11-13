@@ -22,7 +22,7 @@ if (!version) {
 }
 
 if (!fs.existsSync(file)) {
-  process.stdout.write(`## 知邮 ZhiMail v${version}\n\n更新内容详见仓库 CHANGELOG.md。\n`);
+  process.stdout.write(`## 智邮 ZhiYou v${version}\n\n更新内容详见仓库 CHANGELOG.md。\n`);
   process.exit(0);
 }
 
@@ -41,4 +41,4 @@ for (const line of lines) {
 }
 
 const body = collected.join('\n').trim();
-process.stdout.write(`## 知邮 ZhiMail v${version}\n\n${body || '更新内容详见仓库 CHANGELOG.md。'}\n`);
+process.stdout.write(`## 智邮 ZhiYou v${version}\n\n${body || '更新内容详见仓库 CHANGELOG.md。'}\n`);

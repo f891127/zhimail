@@ -1,4 +1,4 @@
-/** 知邮 ZhiMail 主进程：窗口、生命周期、IPC 注册、自动简报调度、截图模式 */
+/** 智邮 ZhiYou 主进程：窗口、生命周期、IPC 注册、自动简报调度、截图模式 */
 
 import { app, BrowserWindow, Menu, shell, nativeTheme } from 'electron';
 import path from 'node:path';
@@ -7,7 +7,7 @@ import { initUpdater, isInstallingUpdate, onUpdateState } from './services/updat
 import { store } from './services/store';
 import { resolveDataDir } from './services/location';
 import { maybeAutoBackup } from './services/backup';
-import { registerIpcHandlers, setMainWindow, startAutoReceive, startScheduler } from './ipc';
+import { registerIpcHandlers, setMainWindow, startAutoReceive, startScheduler, warmDataSize } from './ipc';
 import { seedDemoData } from './services/demo';
 import { imapService } from './services/imap';
 import { briefScheduler } from './services/scheduler';
@@ -19,6 +19,33 @@ import {
   notifyNewMail,
 } from './services/system';
 
+/**
+ * 改名迁移：应用名从「知邮 ZhiMail」改为「智邮 ZhiYou」后，Electron 默认的 userData 目录会跟着变，
+ * 老用户会看到「账户和邮件都不见了」。这里在启动早期把旧目录整体搬过去；
+ * 搬不动（被占用等）就退回使用旧目录，宁可目录名难看，也不能丢数据。
+ */
+function migrateLegacyUserData(): void {
+  try {
+    const appData = app.getPath('appData');
+    const currentName = app.getName();
+    if (!currentName || currentName === 'ZhiMail') return;
+    const targetDir = path.join(appData, currentName);
+    const legacyDirs = [path.join(appData, 'ZhiMail'), path.join(appData, '知邮 ZhiMail')];
+    const legacy = legacyDirs.find((dir) => fs.existsSync(dir));
+    if (!legacy) return;
+    if (fs.existsSync(targetDir)) return; // 已经在新目录运行过，不做任何事
+    try {
+      fs.renameSync(legacy, targetDir);
+      console.log('[migrate] userData 已迁移：', legacy, '->', targetDir);
+    } catch (error) {
+      console.warn('[migrate] 迁移失败，继续使用旧目录：', (error as Error).message);
+      app.setPath('userData', legacy);
+    }
+  } catch {
+    /* 迁移属于尽力而为，失败不阻塞启动 */
+  }
+}
+migrateLegacyUserData();
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 const screenshotMode = process.env.ZHIMAIL_SCREENSHOT === '1';
 
@@ -66,7 +93,7 @@ function createWindow(): BrowserWindow {
     minHeight: 660,
     show: false,
     backgroundColor: '#f5f6f7',
-    title: '知邮 ZhiMail',
+    title: '智邮 ZhiYou',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -514,6 +541,8 @@ if (!gotLock) {
     }
 
     registerIpcHandlers();
+    // 启动后空闲时统计一次数据目录占用，设置页打开即可显示
+    setTimeout(() => void warmDataSize(), 4000);
     // 启动时按设置里的间隔开启定时收取（默认 15 分钟）
     startAutoReceive();
     mainWindow = createWindow();

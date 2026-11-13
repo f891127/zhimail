@@ -233,7 +233,7 @@ export function renderHtmlDocument(title: string, markdown: string, meta: string
     <div class="meta">${escapeHtml(meta)}</div>
   </div>
   ${body}
-  <div class="foot">由知邮 ZhiMail 自动生成</div>
+  <div class="foot">由智邮 ZhiYou 自动生成</div>
 </body>
 </html>`;
 }

@@ -1,4 +1,4 @@
-/** 知邮 ZhiMail —— 渲染进程全局状态与业务动作 */
+/** 智邮 ZhiYou —— 渲染进程全局状态与业务动作 */
 
 import { create } from 'zustand';
 import { resolveLocale, translate, type Locale } from '@/lib/i18n';
@@ -938,7 +938,7 @@ export const useAppStore = create<State>((set, get) => ({
     get().pushToast({
       type: 'success',
       title: enabled ? '已注册为默认邮件客户端' : '已取消默认邮件客户端',
-      message: enabled ? '系统打开 mailto: 链接时会启动知邮' : '已移除相关注册表项',
+      message: enabled ? '系统打开 mailto: 链接时会启动智邮' : '已移除相关注册表项',
     });
     await get().reloadSettings();
   },

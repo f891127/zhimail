@@ -447,7 +447,7 @@ export interface ZhimailApi {
       bytes?: number;
       error?: string;
     }>;
-    dataSize: () => Promise<{ dataDir: string; bytes: number; files: number }>;
+    dataSize: (options?: { force?: boolean }) => Promise<{ dataDir: string; bytes: number; files: number; cached?: boolean }>;
     resetDataDir: () => Promise<{ dataDir: string }>;
     relaunch: () => Promise<boolean>;
     system: () => Promise<AppSystemState>;

@@ -176,7 +176,7 @@ export function MenuBar() {
       { label: tt('版本更新日志'), onClick: () => store.openChangelog() },
       { divider: true, label: tt('') },
       { label: tt('使用说明'), onClick: () => openSettings('about') },
-      { label: tt('关于知邮 ZhiMail'), onClick: () => openSettings('about') },
+      { label: tt('关于智邮 ZhiYou'), onClick: () => openSettings('about') },
     ],
   };
 

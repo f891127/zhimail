@@ -291,6 +291,56 @@ function writeRedeocodeLog(entry: Record<string, unknown>): void {
   }
 }
 
+/**
+ * 统计数据目录占用。用异步 API + 每若干条目让出事件循环，
+ * 避免旧实现里 readdirSync/statSync 递归把主进程（以及整个界面）卡住。
+ */
+let dataSizeCache: { dataDir: string; bytes: number; files: number; at: number } | null = null;
+
+export async function computeDataSize(root: string): Promise<{ bytes: number; files: number }> {
+  let bytes = 0;
+  let files = 0;
+  const queue: string[] = [root];
+  let ticks = 0;
+  while (queue.length) {
+    const dir = queue.shift() as string;
+    let entries: import('node:fs').Dirent[] = [];
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        queue.push(full);
+      } else if (entry.isFile()) {
+        try {
+          const stat = await fs.promises.stat(full);
+          bytes += stat.size;
+          files += 1;
+        } catch {
+          /* 忽略无法读取的文件 */
+        }
+      }
+      ticks += 1;
+      if (ticks % 200 === 0) await new Promise((resolve) => setImmediate(resolve));
+    }
+  }
+  return { bytes, files };
+}
+
+/** 启动后在后台预热一次，用户打开「数据与备份」时直接命中缓存 */
+export async function warmDataSize(): Promise<void> {
+  try {
+    const root = store.root;
+    const result = await computeDataSize(root);
+    dataSizeCache = { dataDir: root, bytes: result.bytes, files: result.files, at: Date.now() };
+  } catch {
+    /* 预热失败不影响使用 */
+  }
+}
+
 export function registerIpcHandlers(): void {
   /* ------------------------------ 应用信息 ------------------------------ */
 
@@ -306,33 +356,15 @@ export function registerIpcHandlers(): void {
   }));
 
   /** 统计数据目录占用：文件数与字节数（邮件正文、附件、简报都在里面） */
-  ipcMain.handle('app/dataSize', () => {
+  ipcMain.handle('app/dataSize', async (_event, options?: { force?: boolean }) => {
     const root = store.root;
-    let bytes = 0;
-    let files = 0;
-    const walk = (dir: string) => {
-      let entries: fs.Dirent[] = [];
-      try {
-        entries = fs.readdirSync(dir, { withFileTypes: true });
-      } catch {
-        return;
-      }
-      for (const entry of entries) {
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          walk(full);
-        } else if (entry.isFile()) {
-          try {
-            bytes += fs.statSync(full).size;
-            files += 1;
-          } catch {
-            /* 忽略无法读取的文件 */
-          }
-        }
-      }
-    };
-    walk(root);
-    return { dataDir: root, bytes, files };
+    // 目录可能很大（上万封邮件的正文与附件），缓存 30 秒，避免每次打开设置都全盘遍历
+    if (!options?.force && dataSizeCache && dataSizeCache.dataDir === root && Date.now() - dataSizeCache.at < 30_000) {
+      return { dataDir: root, bytes: dataSizeCache.bytes, files: dataSizeCache.files, cached: true };
+    }
+    const result = await computeDataSize(root);
+    dataSizeCache = { dataDir: root, bytes: result.bytes, files: result.files, at: Date.now() };
+    return { dataDir: root, bytes: result.bytes, files: result.files, cached: false };
   });
 
   /* ------------------------------ 账户 ------------------------------ */
@@ -1075,7 +1107,7 @@ export function registerIpcHandlers(): void {
     const result = await dialog.showSaveDialog(mainWindow ?? undefined!, {
       title: '导出数据备份',
       defaultPath: path.join(dir, backupFileName()),
-      filters: [{ name: '知邮备份包', extensions: ['zip'] }],
+      filters: [{ name: '智邮备份包', extensions: ['zip'] }],
     });
     if (result.canceled || !result.filePath) return { canceled: true };
     try {
@@ -1090,7 +1122,7 @@ export function registerIpcHandlers(): void {
     const result = await dialog.showOpenDialog(mainWindow ?? undefined!, {
       title: '选择要导入的备份包',
       properties: ['openFile'],
-      filters: [{ name: '知邮备份包', extensions: ['zip'] }],
+      filters: [{ name: '智邮备份包', extensions: ['zip'] }],
     });
     const file = result.filePaths[0];
     if (result.canceled || !file) return { canceled: true };

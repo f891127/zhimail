@@ -17,7 +17,7 @@ export const SKINS: SkinDef[] = [
   {
     id: 'default',
     name: '经典蓝',
-    from: '知邮默认',
+    from: '智邮默认',
     swatch: ['#1f6fd0', '#e8541e', '#eef0f2'],
     note: '经典办公蓝，信息密度高',
   },

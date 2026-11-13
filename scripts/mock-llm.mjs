@@ -105,7 +105,7 @@ const TRIAGE_JSON = JSON.stringify({
 });
 
 function pickReply(userText) {
-  if (userText.includes('只回复这一行文字')) return '知邮 AI 连接正常。';
+  if (userText.includes('只回复这一行文字')) return '智邮 AI 连接正常。';
   if (userText.includes('抽取「需要收件人去做」的待办')) return TODOS_JSON;
   if (userText.includes('3 条可直接发送的中文回复草稿')) return REPLIES_JSON;
   if (userText.includes('重要度与紧急度')) return TRIAGE_JSON;

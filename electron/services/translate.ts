@@ -53,7 +53,7 @@ async function googleTranslate(text: string, target: TranslateTarget): Promise<s
     '&q=' +
     encodeURIComponent(text);
   const response = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ZhiMail/1.0' },
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ZhiYou/1.0' },
     signal: AbortSignal.timeout(20000),
   });
   if (!response.ok) throw new Error(`翻译服务返回 ${response.status}`);

@@ -49,7 +49,7 @@ export function resolveBackupDir(): string {
   return configured ? path.resolve(configured) : defaultBackupDir();
 }
 
-export function backupFileName(prefix = 'ZhiMail-backup'): string {
+export function backupFileName(prefix = 'ZhiYou-backup'): string {
   return `${prefix}-${stamp()}.zip`;
 }
 
@@ -126,7 +126,7 @@ export function inspectBackup(zipPath: string): BackupInspection {
       entries: entries.length,
       bytes,
       valid: Boolean(manifest && manifest.app === 'zhimail'),
-      error: manifest ? undefined : '备份包缺少描述文件，可能不是知邮导出的备份',
+      error: manifest ? undefined : '备份包缺少描述文件，可能不是智邮导出的备份',
     };
   } catch (error) {
     return { entries: 0, bytes: 0, valid: false, error: `无法读取备份包：${(error as Error).message}` };
@@ -193,19 +193,19 @@ export function maybeAutoBackup(): AutoBackupOutcome {
   const today = stamp().slice(0, 8);
   const existing = fs
     .readdirSync(dir)
-    .filter((name) => name.startsWith('ZhiMail-auto-') && name.endsWith('.zip'));
+    .filter((name) => /^(ZhiYou|ZhiMail)-auto-.*\.zip$/.test(name));
 
   if (existing.some((name) => name.includes(`-${today}`))) {
     return { created: false, reason: '今日已备份' };
   }
 
-  const target = path.join(dir, backupFileName('ZhiMail-auto'));
+  const target = path.join(dir, backupFileName('ZhiYou-auto'));
   const result = createBackup(target, { includeSecrets: settings.includeSecrets });
 
   const keep = Math.max(1, settings.keep ?? 7);
   const sorted = fs
     .readdirSync(dir)
-    .filter((name) => name.startsWith('ZhiMail-auto-') && name.endsWith('.zip'))
+    .filter((name) => /^(ZhiYou|ZhiMail)-auto-.*\.zip$/.test(name))
     .sort()
     .reverse();
   let pruned = 0;

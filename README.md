@@ -1,4 +1,4 @@
-# 知邮 ZhiMail
+# 智邮 ZhiYou
 
 ![release](https://img.shields.io/github/v/release/f891127/zhimail?label=release)
 ![license](https://img.shields.io/github/license/f891127/zhimail)
@@ -136,14 +136,14 @@ scripts/
 
 ## 数据与隐私
 
-- 数据目录：Windows 为 `%APPDATA%\ZhiMail\zhimail-data`，可在「设置 → 数据与备份」查看、打开或迁移。
+- 数据目录：Windows 为 `%APPDATA%\ZhiYou\zhimail-data`，可在「设置 → 数据与备份」查看、打开或迁移。
 - 结构：`state.json`（账户、文件夹、设置、待办、简报索引）、`messages/<账户>/<文件夹>/<uid>.json`（正文）、`briefs/`、`attachments/`、`secrets.json`（加密凭据）。
 - 除主动触发的 AI 请求与邮件服务器通信外，应用不向任何第三方发送数据；无遥测。
 
 ## 下载与发布
 
-- 安装包（NSIS，中文安装界面、可选安装目录、桌面与开始菜单快捷方式）：GitHub Release `v1.0.0` 的 `ZhiMail-Setup-1.0.0-x64.exe`（约 81MB）。
-- 免安装版：`ZhiMail-1.0.0-x64-portable.zip`，解压后运行 `ZhiMail.exe`。
+- 安装包（NSIS，中文安装界面、可选安装目录、桌面与开始菜单快捷方式）：GitHub Release `v1.0.0` 的 `ZhiYou-Setup-1.0.0-x64.exe`（约 81MB）。
+- 免安装版：`ZhiYou-1.0.0-x64-portable.zip`，解压后运行 `ZhiYou.exe`。
 - 发布页：https://github.com/f891127/zhimail/releases/latest
 - 仓库与 Releases 均为公开，客户端在线更新无需任何 Token，开箱即可检查并下载新版本。
 

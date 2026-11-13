@@ -1,4 +1,4 @@
-# 知邮 ZhiMail 交付清单
+# 智邮 ZhiYou 交付清单
 
 > 状态：v1.0.0 已完成 · 每项标注可核对的证据（代码路径、截图或运行结果）。
 
@@ -112,7 +112,7 @@
 
 ### 20. 构建产物与仓库
 - [x] 代码推送至 GitHub 公开仓库 https://github.com/f891127/zhimail （完整源码、README、CHANGELOG、MIT 许可证、工作流）。
-- [x] 本地产出免安装便携包 `ZhiMail-1.1.2-x64-portable.zip`（解压即用）。
+- [x] 本地产出免安装便携包 `ZhiYou-1.1.2-x64-portable.zip`（解压即用）。
 - [x] NSIS 安装包由 GitHub Actions 的 Windows runner 构建（本沙箱为 ARM Linux，wine32 不可用，无法本地生成 NSIS）。
 
 ### 22. 自动简报多组排程（日报 / 周报 / 月报 / 年报 / 自定义）

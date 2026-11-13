@@ -25,7 +25,7 @@ export function resolveLocale(setting: AppLocale | undefined, systemLocale: stri
 type Dict = Record<string, string>;
 
 const zhCN: Dict = {
-  'app.name': '知邮 ZhiMail',
+  'app.name': '智邮 ZhiYou',
   'menu.file': '文件',
   'menu.file.compose': '写邮件',
   'menu.file.sync': '同步所有账户',
@@ -47,7 +47,7 @@ const zhCN: Dict = {
   'menu.tools.checkUpdate': '检查更新',
   'menu.help': '帮助',
   'menu.help.changelog': '版本更新日志',
-  'menu.help.about': '关于知邮',
+  'menu.help.about': '关于智邮',
   'menu.help.repo': '访问项目主页',
   'toolbar.compose': '写邮件',
   'toolbar.reply': '回复',
@@ -118,15 +118,15 @@ const zhCN: Dict = {
   'menuItem.checkUpdate': '检查更新…',
   'menuItem.changelog': '版本更新日志',
   'menuItem.help': '使用说明',
-  'menuItem.about': '关于知邮 ZhiMail',
+  'menuItem.about': '关于智邮 ZhiYou',
   'menuItem.readingPane': '显示阅读窗格',
   'menuItem.aiPanel': '显示 AI 助手',
-  'menuItem.exit': '退出知邮',
+  'menuItem.exit': '退出智邮',
 };
 
 const zhTW: Dict = {
   ...zhCN,
-  'app.name': '知郵 ZhiMail',
+  'app.name': '知郵 ZhiYou',
   'menu.file': '檔案',
   'menu.file.compose': '寫郵件',
   'menu.file.sync': '同步所有帳號',
@@ -217,14 +217,14 @@ const zhTW: Dict = {
   'menuItem.checkUpdate': '檢查更新…',
   'menuItem.changelog': '版本更新記錄',
   'menuItem.help': '使用說明',
-  'menuItem.about': '關於知郵 ZhiMail',
+  'menuItem.about': '關於知郵 ZhiYou',
   'menuItem.readingPane': '顯示閱讀窗格',
   'menuItem.aiPanel': '顯示 AI 助理',
   'menuItem.exit': '結束知郵',
 };
 
 const enUS: Dict = {
-  'app.name': 'ZhiMail',
+  'app.name': 'ZhiYou',
   'menu.file': 'File',
   'menu.file.compose': 'New Mail',
   'menu.file.sync': 'Sync All Accounts',
@@ -246,7 +246,7 @@ const enUS: Dict = {
   'menu.tools.checkUpdate': 'Check for Updates',
   'menu.help': 'Help',
   'menu.help.changelog': 'Release Notes',
-  'menu.help.about': 'About ZhiMail',
+  'menu.help.about': 'About ZhiYou',
   'menu.help.repo': 'Open Project Home',
   'toolbar.compose': 'Compose',
   'toolbar.reply': 'Reply',
@@ -315,10 +315,10 @@ const enUS: Dict = {
   'menuItem.checkUpdate': 'Check for Updates…',
   'menuItem.changelog': 'Release Notes',
   'menuItem.help': 'How to Use',
-  'menuItem.about': 'About ZhiMail',
+  'menuItem.about': 'About ZhiYou',
   'menuItem.readingPane': 'Show Reading Pane',
   'menuItem.aiPanel': 'Show AI Assistant',
-  'menuItem.exit': 'Exit ZhiMail',
+  'menuItem.exit': 'Exit ZhiYou',
 };
 
 const DICTS: Record<Locale, Dict> = { 'zh-CN': zhCN, 'zh-TW': zhTW, 'en-US': enUS };
@@ -340,7 +340,7 @@ export const ZH_LABEL_KEYS: Record<string, string> = {
   立即同步: 'menuItem.syncNow',
   重置演示数据: 'menuItem.resetDemo',
   退出: 'menuItem.quit',
-  退出知邮: 'menuItem.exit',
+  退出智邮: 'menuItem.exit',
   标记为已读: 'menuItem.markRead',
   标记为未读: 'menuItem.markUnread',
   添加星标: 'menuItem.addFlag',
@@ -361,7 +361,7 @@ export const ZH_LABEL_KEYS: Record<string, string> = {
   '检查更新…': 'menuItem.checkUpdate',
   版本更新日志: 'menuItem.changelog',
   使用说明: 'menuItem.help',
-  '关于知邮 ZhiMail': 'menuItem.about',
+  '关于智邮 ZhiYou': 'menuItem.about',
   '写邮件': 'toolbar.compose',
   全部回复: 'toolbar.replyAll',
   转发: 'toolbar.forward',

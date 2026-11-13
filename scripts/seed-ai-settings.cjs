@@ -3,7 +3,7 @@
 const { app } = require('electron');
 const path = require('node:path');
 
-app.setName('ZhiMail');
+app.setName('智邮');
 app.disableHardwareAcceleration();
 
 app.whenReady().then(() => {

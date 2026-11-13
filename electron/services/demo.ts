@@ -716,7 +716,7 @@ async function buildDemoDocx(title: string, lines: string[]): Promise<Buffer> {
         children: [
           new Paragraph({ text: title.replace(/\.docx$/i, ''), heading: HeadingLevel.HEADING_1 }),
           new Paragraph({
-            children: [new TextRun({ text: '本文档由知邮 ZhiMail 演示数据自动生成，用于验证 Word 附件预览。', italics: true })],
+            children: [new TextRun({ text: '本文档由智邮 ZhiYou 演示数据自动生成，用于验证 Word 附件预览。', italics: true })],
           }),
           ...lines.map((line) => new Paragraph({ text: line })),
         ],

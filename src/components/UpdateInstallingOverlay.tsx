@@ -35,7 +35,7 @@ export function UpdateInstallingOverlay() {
         </div>
 
         <div className="mt-3 space-y-1 text-[11px] leading-4 text-shell-sub">
-          <div>1. 关闭知邮，启动安装程序（静默安装，约 5~20 秒）</div>
+          <div>1. 关闭智邮，启动安装程序（静默安装，约 5~20 秒）</div>
           <div>2. 安装完成后自动打开新版本（无需手动重启）</div>
           <div className="text-shell-faint">
             已等待 {seconds} 秒。若窗口长时间无变化，说明安装程序未能接管，可在「设置 → 在线更新」点击「手动运行安装包」，

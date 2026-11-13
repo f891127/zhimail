@@ -149,7 +149,7 @@ export async function exportBrief(id: string, format: 'md' | 'html' | 'docx'): P
   const brief = store.getBrief(id);
   if (!brief) throw new Error('简报不存在或已被删除');
 
-  const targetDir = path.join(app.getPath('documents'), '知邮简报');
+  const targetDir = path.join(app.getPath('documents'), '智邮简报');
   fs.mkdirSync(targetDir, { recursive: true });
 
   const safeTitle = brief.title.replace(/[\\/:*?"<>|]/g, '_');
@@ -158,7 +158,7 @@ export async function exportBrief(id: string, format: 'md' | 'html' | 'docx'): P
   if (format === 'md') {
     const filename = `${safeTitle}.md`;
     const filePath = path.join(targetDir, filename);
-    const content = `# ${brief.title}\n\n> ${meta}\n\n${brief.markdown}\n\n---\n\n由知邮 ZhiMail 自动生成\n`;
+    const content = `# ${brief.title}\n\n> ${meta}\n\n${brief.markdown}\n\n---\n\n由智邮 ZhiYou 自动生成\n`;
     fs.writeFileSync(filePath, content, 'utf8');
     return { path: filePath, filename, format };
   }

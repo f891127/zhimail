@@ -1,6 +1,6 @@
 appId: com.zhimail.desktop
-productName: ZhiMail
-copyright: Copyright © 2026 fxj (ZhiMail)
+productName: 智邮
+copyright: Copyright © 2026 fxj (智邮 ZhiYou)
 
 directories:
   output: release
@@ -39,18 +39,19 @@ win:
         - x64
   icon: build/icon.ico
   # zip 等默认目标的命名；NSIS 安装包由下方 nsis.artifactName 单独覆盖
-  artifactName: ZhiMail-Portable-${version}-x64.${ext}
-  executableName: ZhiMail
+  artifactName: ZhiYou-Portable-${version}-x64.${ext}
+  executableName: ZhiYou
 
 nsis:
-  artifactName: ZhiMail-Setup-${version}-x64.${ext}
+  artifactName: ZhiYou-Setup-${version}-x64.${ext}
   oneClick: false
   perMachine: false
   allowElevation: true
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: ZhiMail
+  shortcutName: 智邮
+  uninstallDisplayName: 智邮
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico
   installerHeaderIcon: build/icon.ico
@@ -64,4 +65,4 @@ nsis:
   include: build/installer.nsh
 
 portable:
-  artifactName: ZhiMail-Portable-${version}-x64.${ext}
+  artifactName: ZhiYou-Portable-${version}-x64.${ext}

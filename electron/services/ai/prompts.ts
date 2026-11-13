@@ -1,4 +1,4 @@
-/** 知邮 ZhiMail —— AI 提示词。所有提示词面向中文办公场景，要求输出可直接落库的结构化结果。 */
+/** 智邮 ZhiYou —— AI 提示词。所有提示词面向中文办公场景，要求输出可直接落库的结构化结果。 */
 
 import type { MessageMeta } from '../types';
 
@@ -240,5 +240,5 @@ ${body}`;
 
 /** 连接测试 */
 export function promptPing() {
-  return '请只回复这一行文字：知邮 AI 连接正常。不要添加任何其他内容。';
+  return '请只回复这一行文字：智邮 AI 连接正常。不要添加任何其他内容。';
 }

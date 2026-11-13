@@ -56,13 +56,13 @@ export function SystemSettingsPage() {
         <div className="space-y-[2px] rounded border border-shell-lineSoft bg-[#fafbfc] px-2.5 py-2">
           <Checkbox
             checked={system?.defaultMailClient ?? false}
-            label="设置知邮为系统默认邮件客户端"
+            label="设置智邮为系统默认邮件客户端"
             hint={system?.canSetDefaultMailClient ? '(写入当前用户注册表，无需管理员)' : '(仅 Windows 支持)'}
             onChange={(value) => void store.setDefaultMailClient(value)}
           />
           <Checkbox
             checked={app?.autoLaunch ?? false}
-            label="开机自动启动知邮"
+            label="开机自动启动智邮"
             onChange={(value) => patchApp({ autoLaunch: value })}
           />
           <Checkbox

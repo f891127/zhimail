@@ -224,12 +224,12 @@ export async function buildDocxBuffer(options: {
     new Paragraph({
       spacing: { before: 400 },
       border: { top: { style: BorderStyle.SINGLE, size: 4, color: 'E8EBEE', space: 6 } },
-      children: [new TextRun({ text: '由知邮 ZhiMail 自动生成', font: FONT, size: 16, color: '8D959F' })],
+      children: [new TextRun({ text: '由智邮 ZhiYou 自动生成', font: FONT, size: 16, color: '8D959F' })],
     }),
   );
 
   const doc = new Document({
-    creator: '知邮 ZhiMail',
+    creator: '智邮 ZhiYou',
     title: options.title,
     description: options.meta,
     styles: {

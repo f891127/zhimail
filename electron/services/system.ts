@@ -66,22 +66,24 @@ export function setDefaultMailClient(enabled: boolean): Promise<{ ok: boolean; e
       return;
     }
     const exe = process.execPath;
-    const clientKey = 'HKCU\\Software\\Clients\\Mail\\知邮 ZhiMail';
+    const clientKey = 'HKCU\\Software\\Clients\\Mail\\智邮 ZhiYou';
     const commands: string[][] = enabled
       ? [
-          ['add', 'HKCU\\Software\\Classes\\ZhiMail', '/ve', '/d', 'URL:知邮邮件', '/f'],
-          ['add', 'HKCU\\Software\\Classes\\ZhiMail\\DefaultIcon', '/ve', '/d', `${exe},0`, '/f'],
-          ['add', 'HKCU\\Software\\Classes\\ZhiMail\\shell\\open\\command', '/ve', '/d', `"${exe}" "%1"`, '/f'],
+          ['add', 'HKCU\\Software\\Classes\\ZhiYou', '/ve', '/d', 'URL:智邮邮件', '/f'],
+          ['add', 'HKCU\\Software\\Classes\\ZhiYou\\DefaultIcon', '/ve', '/d', `${exe},0`, '/f'],
+          ['add', 'HKCU\\Software\\Classes\\ZhiYou\\shell\\open\\command', '/ve', '/d', `"${exe}" "%1"`, '/f'],
           ['add', 'HKCU\\Software\\Classes\\mailto', '/ve', '/d', 'URL:mailto Protocol', '/f'],
           ['add', 'HKCU\\Software\\Classes\\mailto\\shell\\open\\command', '/ve', '/d', `"${exe}" "%1"`, '/f'],
-          ['add', clientKey, '/ve', '/d', '知邮 ZhiMail', '/f'],
+          ['add', clientKey, '/ve', '/d', '智邮 ZhiYou', '/f'],
           ['add', `${clientKey}\\DefaultIcon`, '/ve', '/d', `${exe},0`, '/f'],
           ['add', `${clientKey}\\shell\\open\\command`, '/ve', '/d', `"${exe}" "%1"`, '/f'],
         ]
       : [
+          ['delete', 'HKCU\\Software\\Classes\\ZhiYou', '/f'],
           ['delete', 'HKCU\\Software\\Classes\\ZhiMail', '/f'],
           ['delete', 'HKCU\\Software\\Classes\\mailto\\shell\\open\\command', '/f'],
           ['delete', clientKey, '/f'],
+          ['delete', 'HKCU\\Software\\Clients\\Mail\\知邮 ZhiMail', '/f'],
         ];
 
     const run = (index: number) => {
@@ -107,12 +109,12 @@ export function setDefaultMailClient(enabled: boolean): Promise<{ ok: boolean; e
 export function ensureTray(onShow: () => void, onQuit: () => void): Tray {
   if (tray) return tray;
   tray = new Tray(nativeImage.createFromDataURL(TRAY_ICON_DATA_URL));
-  tray.setToolTip('知邮 ZhiMail');
+  tray.setToolTip('智邮 ZhiYou');
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: '显示主窗口', click: onShow },
       { type: 'separator' },
-      { label: '退出知邮', click: onQuit },
+      { label: '退出智邮', click: onQuit },
     ]),
   );
   tray.on('double-click', onShow);

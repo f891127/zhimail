@@ -1,4 +1,4 @@
-/** 知邮 ZhiMail —— 应用外壳：菜单栏 + 工具栏 + 三栏主体 + AI 抽屉 + 状态栏 */
+/** 智邮 ZhiYou —— 应用外壳：菜单栏 + 工具栏 + 三栏主体 + AI 抽屉 + 状态栏 */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
@@ -175,7 +175,7 @@ export default function App() {
             <path d="M3 6.5l9 6.2 9-6.2" />
           </svg>
         </div>
-        <div className="text-sm font-semibold text-shell-text">知邮 ZhiMail</div>
+        <div className="text-sm font-semibold text-shell-text">智邮 ZhiYou</div>
         <div className="text-xs text-shell-faint">正在加载邮箱数据…</div>
       </div>
     );
