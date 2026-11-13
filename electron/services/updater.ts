@@ -38,6 +38,8 @@ export interface UpdateState {
   percent?: number;
   bytesPerSecond?: number;
   error?: string;
+  /** 差分下载校验失败后回退成整包下载（进度会回落），界面上解释一句 */
+  fullDownloadFallback?: boolean;
   canCheck: boolean;
 }
 
@@ -66,6 +68,8 @@ let initialized = false;
 let lastProgressAt = 0;
 /** 下载期间用户改过更新源，等下载结束再应用 */
 let pendingFeed = false;
+/** 差分下载回退成整包下载（进度会回落），用于给界面解释 */
+let fullFallback = false;
 
 function setState(patch: Partial<UpdateState>): void {
   state = { ...state, ...patch, currentVersion: app.getVersion() };
@@ -134,9 +138,10 @@ export function initUpdater(): void {
 
   autoUpdater.autoDownload = store.getSettings().update?.autoDownload ?? false;
   autoUpdater.autoInstallOnAppQuit = true;
-  // 差分下载依赖旧安装包与 blockmap，校验不通过时会整包重下（进度会从 100% 回到 0）。
-  // 关掉它，一次下载一次完成，进度条不会「下完又重下」。
-  autoUpdater.disableDifferentialDownload = true;
+  // 差分下载保留开启：更新包只有几十 MB，差异部分通常只有几 MB。
+  // 但它在「本地没有旧安装包可做基准」或块校验不通过时会静默回退成整包下载，
+  // 表现就是进度忽然从高处掉回 0。这里检测到回退就给出说明，而不是让它看起来像重新下载。
+  autoUpdater.disableDifferentialDownload = false;
   autoUpdater.allowPrerelease = false;
   autoUpdater.logger = null;
 
@@ -156,6 +161,11 @@ export function initUpdater(): void {
   autoUpdater.on('download-progress', (progress) => {
     const percent = Math.round(progress.percent * 10) / 10;
     const now = Date.now();
+    // 进度明显回落 = 差分失败后改成整包下载，标记出来让界面解释一句
+    if (typeof state.percent === 'number' && state.percent - percent > 15) {
+      fullFallback = true;
+      setState({ fullDownloadFallback: true });
+    }
     // 每秒最多刷 4 次进度，避免大量 IPC + 重渲染把界面卡住
     if (percent < 100 && now - lastProgressAt < 250) return;
     lastProgressAt = now;
@@ -256,7 +266,8 @@ export async function downloadUpdate(): Promise<UpdateState> {
   if (state.phase === 'downloading' || state.phase === 'downloaded' || state.phase === 'installing') {
     return state;
   }
-  setState({ phase: 'downloading', percent: 0, bytesPerSecond: 0, error: undefined });
+  fullFallback = false;
+  setState({ phase: 'downloading', percent: 0, bytesPerSecond: 0, error: undefined, fullDownloadFallback: false });
   lastProgressAt = 0;
   // 不 await 整个下载过程：IPC 立即返回，进度靠 download-progress 事件推送，
   // 否则点「开始下载」后这次调用要等到下载结束才回来，界面上就像点了没反应。
@@ -335,7 +346,7 @@ export function installUpdate(): { ok: boolean; error?: string } {
       const message = String((error as Error).message).slice(0, 300);
       setState({ phase: 'downloaded', error: `启动安装失败：${message}` });
     }
-  }, 1200);
+  }, 400);
 
   // 兜底：30 秒后进程仍在运行，说明安装器没有接管，给出可操作的提示
   const timer = setTimeout(() => {

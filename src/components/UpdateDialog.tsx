@@ -128,6 +128,11 @@ export function UpdateDialog() {
                 <span>{formatSpeed(updateState?.bytesPerSecond)}</span>
               </div>
               <p className="text-[11px] text-shell-faint">下载完成后会提示立即重启安装，不影响当前使用。</p>
+              {updateState?.fullDownloadFallback && (
+                <p className="rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-700">
+                  差分校验未通过（本地没有可比的旧安装包），已自动改为整包下载，进度会从头计算。
+                </p>
+              )}
             </div>
           )}
 

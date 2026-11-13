@@ -1674,6 +1674,12 @@ export function SettingsDialog() {
                     </div>
                   )}
 
+                  {updateState?.phase === 'downloading' && updateState?.fullDownloadFallback && (
+                    <p className="mt-1.5 text-[11px] leading-4 text-amber-700">
+                      差分校验未通过（本地没有可比的旧安装包），已自动改为整包下载，进度会从头计算。
+                    </p>
+                  )}
+
                   {updateState?.error && (
                     <p className="mt-1.5 text-[11px] leading-4 text-rose-600">{updateState.error}</p>
                   )}

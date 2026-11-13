@@ -29,7 +29,7 @@ import { imapService, looksMojibake, repairMojibake, makeSnippet } from './servi
 import { smtpService } from './services/smtp';
 import { groupThreads } from './services/thread';
 import { runSearch } from './services/search';
-import { generateBrief, exportBrief, listBriefs, getBrief, removeBrief, BRIEF_GROUPS, BRIEF_ROOT_ID } from './services/brief';
+import { generateBrief, exportBrief, listBriefs, getBrief, removeBrief, saveAnalysis, BRIEF_ROOT_ID } from './services/brief';
 import { createTodoItems, listTodos, removeTodo, toggleTodo, updateTodo, clearCompleted, todoStats } from './services/todo';
 import { seedDemoData, materializeDemoAttachment, DEMO_ACCOUNT_ID } from './services/demo';
 import { briefScheduler } from './services/scheduler';
@@ -89,30 +89,20 @@ function emit(channel: string, payload: unknown): void {
 
 function briefFolders(): FolderView[] {
   const briefs = store.listBriefs();
-  const root: FolderView = {
-    id: BRIEF_ROOT_ID,
-    accountId: 'local',
-    name: '邮件简报',
-    kind: 'brief',
-    deletable: false,
-    order: 900,
-    local: true,
-    unread: 0,
-    total: briefs.length,
-  };
-  const groups: FolderView[] = BRIEF_GROUPS.map((group, index) => ({
-    id: group.id,
-    accountId: 'local',
-    name: group.name,
-    kind: 'brief' as const,
-    parentId: BRIEF_ROOT_ID,
-    deletable: false,
-    order: 901 + index,
-    local: true,
-    unread: 0,
-    total: briefs.filter((brief) => brief.group === group.id).length,
-  }));
-  return [root, ...groups];
+  // 简报不再按日/周/月/年分子目录，全部平铺在「邮件简报」下，靠标题与标签区分周期
+  return [
+    {
+      id: BRIEF_ROOT_ID,
+      accountId: 'local',
+      name: '邮件简报',
+      kind: 'brief',
+      deletable: false,
+      order: 900,
+      local: true,
+      unread: 0,
+      total: briefs.length,
+    },
+  ];
 }
 
 /** 把「常用文件夹」的虚拟 id 翻译成查询条件 */
@@ -788,7 +778,19 @@ export function registerIpcHandlers(): void {
       const result = await analyzeRange(params, {
         onProgress: (message) => emit('ai:progress', { message }),
       });
-      return { ok: true, result };
+      // 汇总分析完成后自动落库：存进「邮件简报」文件夹，并把待办写进待办清单
+      let saved: { id: string; title: string } | null = null;
+      let todoCount = 0;
+      try {
+        const { brief, todoCount: count } = await saveAnalysis(params, result);
+        saved = { id: brief.id, title: brief.title };
+        todoCount = count;
+        emit('brief:changed', { reason: 'analysis' });
+        if (count > 0) emit('todo:changed', { reason: 'analysis' });
+      } catch (error) {
+        console.warn('[analyze] 自动存入简报失败', (error as Error).message);
+      }
+      return { ok: true, result, brief: saved, todoCount };
     } catch (error) {
       return { ok: false, error: (error as Error).message };
     }
@@ -1072,7 +1074,15 @@ export function registerIpcHandlers(): void {
         return { ok: true, kind: 'slides', slides, text: `共 ${slideFiles.length} 页` };
       }
       if (ext === '.doc') {
-        return { ok: false, error: '旧版 .doc 格式暂不支持在线预览，可用「打开」或「另存为」后查看' };
+        // Word 97-2003 是二进制格式，mammoth 只吃 docx，这里用 word-extractor 取正文
+        const WordExtractor = (await import('word-extractor')).default;
+        const extractor = new WordExtractor();
+        const doc = await extractor.extract(file);
+        const text = doc.getBody().replace(/\n{3,}/g, '\n\n').trim();
+        if (!text) {
+          return { ok: false, error: '这个 .doc 里没有可提取的正文，可用「打开」用系统程序查看' };
+        }
+        return { ok: true, kind: 'text', text: text.slice(0, 200_000) };
       }
       return { ok: true, kind: 'other', size: stat.size };
     } catch (error) {

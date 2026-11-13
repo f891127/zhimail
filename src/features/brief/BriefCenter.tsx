@@ -7,22 +7,21 @@ import { dateOnly, fullTime } from '@/lib/format';
 import { renderMarkdown } from '@/lib/markdown';
 import { ContextMenu } from '@/components/ContextMenu';
 
-const GROUPS = [
-  { id: 'briefs/daily', label: '日报' },
-  { id: 'briefs/weekly', label: '周报' },
-  { id: 'briefs/monthly', label: '月报' },
-  { id: 'briefs/custom', label: '自定义' },
-];
+/** 简报不再分子目录，列表里用标签区分周期 */
+const KIND_LABEL: Record<string, string> = {
+  daily: '日报',
+  weekly: '周报',
+  monthly: '月报',
+  yearly: '年报',
+  custom: '自定义',
+};
 
 export function BriefCenter() {
   const [menu, setMenu] = useState<{ x: number; y: number; id: string; title: string } | null>(null);
   const store = useAppStore();
-  const { briefs, briefGroup, selectedBriefId, aiBusy } = store;
+  const { briefs, selectedBriefId, aiBusy } = store;
 
-  const filtered = useMemo(() => {
-    if (!briefGroup) return briefs;
-    return briefs.filter((brief) => brief.group === briefGroup);
-  }, [briefs, briefGroup]);
+  const filtered = useMemo(() => briefs, [briefs]);
 
   const selected = briefs.find((brief) => brief.id === selectedBriefId) ?? filtered[0];
 
@@ -44,35 +43,28 @@ export function BriefCenter() {
           </button>
         </div>
 
-        <div className="flex shrink-0 flex-wrap gap-1 border-b border-shell-lineSoft px-2 py-1.5">
-          <button
-            type="button"
-            onClick={() => store.setBriefGroup('')}
-            className={`rounded px-1.5 py-[2px] text-[11px] transition-colors duration-120 ${
-              !briefGroup ? 'bg-brand-500 text-white' : 'text-shell-sub hover:bg-black/[0.05]'
-            }`}
-          >
-            全部
-          </button>
-          {GROUPS.map((group) => (
-            <button
-              key={group.id}
-              type="button"
-              onClick={() => store.setBriefGroup(group.id)}
-              className={`rounded px-1.5 py-[2px] text-[11px] transition-colors duration-120 ${
-                briefGroup === group.id ? 'bg-brand-500 text-white' : 'text-shell-sub hover:bg-black/[0.05]'
-              }`}
-            >
-              {group.label}
-            </button>
-          ))}
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-shell-lineSoft px-2.5 py-1.5">
+          {(['daily', 'weekly', 'monthly', 'yearly', 'custom'] as const).map((kind) => {
+            const count = briefs.filter((brief) => brief.kind === kind).length;
+            if (!count) return null;
+            return (
+              <span
+                key={kind}
+                className="rounded bg-black/[0.04] px-1.5 py-[2px] text-[11px] text-shell-sub"
+                title={`${KIND_LABEL[kind]}共 ${count} 份`}
+              >
+                {KIND_LABEL[kind]} {count}
+              </span>
+            );
+          })}
+          <span className="ml-auto text-[11px] text-shell-faint">全部 {briefs.length} 份</span>
         </div>
 
         <div className="scroll-area flex-1">
           {filtered.length === 0 && (
             <div className="flex flex-col items-center gap-2 px-6 py-14 text-center text-shell-faint">
               <Icon name="document" size={28} className="text-shell-line" strokeWidth={1.2} />
-              <p className="text-xs">该分组还没有简报</p>
+              <p className="text-xs">还没有简报，生成一份试试</p>
               <button type="button" className="ghost-btn" onClick={() => store.setAIPanel(true, 'brief')}>
                 <Icon name="sparkles" size={12} className="text-brand-500" />
                 生成一份

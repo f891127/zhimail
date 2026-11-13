@@ -254,6 +254,10 @@ export class Store {
             readerActions: [...DEFAULT_SETTINGS.ui.readerActions],
           };
         }
+        // 简报目录不再按日/周/月/年分组：旧数据统一并到「邮件简报」根目录
+        this.state.briefs = (this.state.briefs ?? []).map((brief) =>
+          brief.group && brief.group !== 'briefs' ? { ...brief, group: 'briefs' } : brief,
+        );
       } catch (error) {
         console.error('[store] state.json 解析失败，使用空状态重建', error);
         this.state = emptyState();

@@ -339,7 +339,7 @@ export const useAppStore = create<State>((set, get) => ({
   analysisParams: defaultRange(),
 
   briefs: [],
-  briefGroup: 'briefs/weekly',
+  briefGroup: '',
   selectedBriefId: null,
 
   todos: [],
@@ -482,7 +482,7 @@ export const useAppStore = create<State>((set, get) => ({
         })();
       },
       showBriefs: () => {
-        set({ view: 'briefs', briefGroup: 'briefs/weekly', aiPanelOpen: false });
+        set({ view: 'briefs', briefGroup: '', aiPanelOpen: false });
         const first = get().briefs[0];
         if (first) set({ selectedBriefId: first.id });
       },
@@ -542,7 +542,7 @@ export const useAppStore = create<State>((set, get) => ({
 
   selectFolder: async (folderId: string) => {
     if (folderId.startsWith('briefs')) {
-      set({ selectedFolderId: folderId, view: 'briefs', briefGroup: folderId === 'briefs' ? '' : folderId, selectedBriefId: null });
+      set({ selectedFolderId: folderId, view: 'briefs', briefGroup: '', selectedBriefId: null });
       await get().reloadBriefs();
       return;
     }
@@ -1062,7 +1062,16 @@ export const useAppStore = create<State>((set, get) => ({
           messageIds: result.result.messageIds,
           batches: result.result.batches,
         });
-        if (result.result.todos.length) await get().reloadTodos();
+        // 主进程已经把这次分析存成简报并写入待办，这里同步刷新列表
+        await get().reloadBriefs();
+        await get().reloadTodos();
+        if (result.brief) {
+          get().pushToast({
+            type: 'success',
+            title: `已存入「邮件简报」${result.todoCount ? `，生成 ${result.todoCount} 条待办` : ''}`,
+            message: result.brief.title,
+          });
+        }
       } else {
         get().pushToast({ type: 'error', title: '汇总分析失败', message: result.error ?? '未知错误' });
       }

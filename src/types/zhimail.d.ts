@@ -291,6 +291,8 @@ export interface UpdateState {
   percent?: number;
   bytesPerSecond?: number;
   error?: string;
+  /** 差分下载失败后回退成整包下载 */
+  fullDownloadFallback?: boolean;
   canCheck: boolean;
 }
 
@@ -553,7 +555,14 @@ export interface ZhimailApi {
     }>;
     summarize: (messageId: string) => Promise<{ ok: boolean; markdown?: string; error?: string }>;
     summarizeThread: (threadId: string) => Promise<{ ok: boolean; markdown?: string; count?: number; error?: string }>;
-    analyze: (params: RangeAnalysisParams) => Promise<{ ok: boolean; result?: RangeAnalysis; error?: string }>;
+    analyze: (params: RangeAnalysisParams) => Promise<{
+      ok: boolean;
+      result?: RangeAnalysis;
+      /** 自动存入「邮件简报」的简报 */
+      brief?: { id: string; title: string } | null;
+      todoCount?: number;
+      error?: string;
+    }>;
     replies: (messageId: string) => Promise<{ ok: boolean; suggestions?: ReplySuggestion[]; error?: string }>;
     compose: (params: ComposeAssistParams) => Promise<{ ok: boolean; text?: string; error?: string }>;
     triage: (messageId: string) => Promise<{ ok: boolean; result?: TriageResult; error?: string }>;

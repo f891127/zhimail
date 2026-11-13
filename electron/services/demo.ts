@@ -643,7 +643,7 @@ export function seedDemoData(force = false): { seeded: boolean } {
     },
     messageIds: metas.slice(0, 8).map((meta) => meta.id),
     auto: false,
-    group: 'briefs/weekly',
+    group: 'briefs',
   });
 
   // 示例待办

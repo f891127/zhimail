@@ -12,19 +12,12 @@ import { analyzeRange } from './ai/tasks';
 import { createTodoItems } from './todo';
 import { buildDocxBuffer } from './export/docx';
 import { renderHtmlDocument } from './export/markdown';
-import type { Brief, BriefGenerateParams, BriefKind, MessageMeta } from './types';
+import type { Brief, BriefGenerateParams, BriefKind, MessageMeta, RangeAnalysis } from './types';
 
 export const BRIEF_ROOT_ID = 'briefs';
-export const BRIEF_GROUPS: { id: string; name: string; kind: BriefKind }[] = [
-  { id: 'briefs/daily', name: '日报', kind: 'daily' },
-  { id: 'briefs/weekly', name: '周报', kind: 'weekly' },
-  { id: 'briefs/monthly', name: '月报', kind: 'monthly' },
-  { id: 'briefs/yearly', name: '年报', kind: 'yearly' },
-  { id: 'briefs/custom', name: '自定义简报', kind: 'custom' },
-];
-
-export function groupOf(kind: BriefKind): string {
-  return `briefs/${kind}`;
+/** 简报不再分子目录：全部放在「邮件简报」根目录，周期靠 kind 与标题区分 */
+export function groupOf(_kind?: BriefKind): string {
+  return BRIEF_ROOT_ID;
 }
 
 function formatDate(ts: number): string {
@@ -48,13 +41,14 @@ function defaultTitle(kind: BriefKind, start: number, end: number): string {
   }
 }
 
-export async function generateBrief(
+/** 把一次分析结果落成简报（并生成待办）；「生成简报」与「汇总分析」共用这段逻辑 */
+async function persistAnalysis(
   params: BriefGenerateParams,
-  hooks?: { onProgress?: (message: string) => void },
+  analysis: RangeAnalysis,
+  options: { kind?: BriefKind; title?: string; auto?: boolean } = {},
 ): Promise<Brief> {
-  const analysis = await analyzeRange(params, hooks);
-  const kind: BriefKind = params.briefKind ?? 'custom';
-  const title = params.title?.trim() || defaultTitle(kind, params.rangeStart, params.rangeEnd);
+  const kind: BriefKind = options.kind ?? params.briefKind ?? 'custom';
+  const title = options.title?.trim() || params.title?.trim() || defaultTitle(kind, params.rangeStart, params.rangeEnd);
   const id = `brief-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
 
   const scopeText =
@@ -116,12 +110,33 @@ export async function generateBrief(
     markdown: analysis.markdown,
     stats: analysis.stats,
     messageIds: analysis.messageIds,
-    auto: Boolean(params.auto),
+    auto: options.auto ?? Boolean(params.auto),
     group: groupOf(kind),
   };
 
   store.saveBrief(brief);
   return brief;
+}
+
+export async function generateBrief(
+  params: BriefGenerateParams,
+  hooks?: { onProgress?: (message: string) => void },
+): Promise<Brief> {
+  const analysis = await analyzeRange(params, hooks);
+  return persistAnalysis(params, analysis);
+}
+
+/** 汇总分析完成后自动落库：存入「邮件简报」并生成对应待办 */
+export async function saveAnalysis(
+  params: BriefGenerateParams,
+  analysis: RangeAnalysis,
+  options: { title?: string } = {},
+): Promise<{ brief: Brief; todoCount: number }> {
+  const brief = await persistAnalysis(params, analysis, {
+    kind: params.briefKind ?? 'custom',
+    title: options.title,
+  });
+  return { brief, todoCount: brief.todoCount };
 }
 
 export function listBriefs(groupId?: string): Brief[] {
