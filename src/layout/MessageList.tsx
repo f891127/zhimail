@@ -39,10 +39,12 @@ function StarCell({ flagged, onToggle }: { flagged: boolean; onToggle: () => voi
 function MessageRow({
   message,
   active,
+  multi,
   onContext,
 }: {
   message: MessageMeta;
   active: boolean;
+  multi: boolean;
   onContext: (event: React.MouseEvent, message: MessageMeta) => void;
 }) {
   const store = useAppStore();
@@ -53,12 +55,24 @@ function MessageRow({
 
   return (
     <div
-      onClick={() => void store.selectMessage(message.id)}
+      onClick={(event) =>
+        void store.selectMessage(message.id, {
+          shiftKey: event.shiftKey,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+        })
+      }
       onContextMenu={(event) => onContext(event, message)}
-      className={`group flex cursor-default items-start gap-2 border-b border-shell-lineSoft px-2.5 ${
+      className={`group flex cursor-default items-start gap-2 border-b border-l-[3px] border-shell-lineSoft px-2.5 ${
         density === 'compact' ? 'py-[7px]' : 'py-[11px]'
       } transition-colors duration-120 ${
-        active ? 'bg-brand-50' : unread ? 'bg-white' : 'bg-[#fcfcfd] hover:bg-brand-50/50'
+        multi
+          ? 'border-l-brand-600 bg-brand-100'
+          : active
+            ? 'border-l-brand-500 bg-brand-100'
+            : unread
+              ? 'border-l-transparent bg-white hover:bg-brand-50'
+              : 'border-l-transparent bg-[#fcfcfd] hover:bg-brand-50'
       }`}
     >
       <div className="flex w-[13px] shrink-0 justify-center pt-[5px]">
@@ -89,7 +103,7 @@ function MessageRow({
         <div className="mt-[2px] flex items-baseline gap-1.5">
           <span
             className={`min-w-0 flex-1 truncate text-xs ${
-              unread ? 'font-medium text-shell-text' : 'text-shell-sub'
+              multi || active ? 'font-semibold text-brand-900' : unread ? 'font-medium text-shell-text' : 'text-shell-sub'
             }`}
             title={message.subject}
           >
@@ -131,10 +145,22 @@ function ThreadRow({
   return (
     <div>
       <div
-        onClick={() => void store.selectMessage(latest.id)}
+        onClick={(event) =>
+          void store.selectMessage(latest.id, {
+            shiftKey: event.shiftKey,
+            ctrlKey: event.ctrlKey,
+            metaKey: event.metaKey,
+          })
+        }
         onContextMenu={(event) => onContext(event, latest)}
-        className={`group flex cursor-default items-start gap-2 border-b border-shell-lineSoft px-2.5 py-[8px] transition-colors duration-120 ${
-          active ? 'bg-brand-50' : thread.unread > 0 ? 'bg-white' : 'bg-[#fcfcfd] hover:bg-brand-50/50'
+        className={`group flex cursor-default items-start gap-2 border-b border-l-[3px] border-shell-lineSoft px-2.5 py-[8px] transition-colors duration-120 ${
+          store.selectedIds.includes(latest.id)
+            ? 'border-l-brand-600 bg-brand-100'
+            : active
+              ? 'border-l-brand-500 bg-brand-100'
+              : thread.unread > 0
+                ? 'border-l-transparent bg-white hover:bg-brand-50'
+                : 'border-l-transparent bg-[#fcfcfd] hover:bg-brand-50'
         }`}
       >
         <button
@@ -175,6 +201,7 @@ function ThreadRow({
             <MessageRow
               message={message}
               active={message.id === store.selectedMessageId}
+              multi={store.selectedIds.includes(message.id) && store.selectedIds.length > 1}
               onContext={onContext}
             />
           </div>
@@ -267,8 +294,42 @@ export function MessageList() {
       ]
     : [];
 
+  const multiCount = store.selectedIds.length;
   return (
     <div className="flex h-full min-w-0 flex-col bg-white">
+      {multiCount > 1 && (
+        <div className="flex h-[30px] shrink-0 items-center gap-2 border-b border-brand-200 bg-brand-50 px-2 text-[11px] text-brand-800">
+          <span className="shrink-0 font-medium">已选 {multiCount} 封</span>
+          <button
+            type="button"
+            className="shrink-0 rounded px-1.5 py-[2px] hover:bg-brand-100"
+            onClick={() => void store.deleteMessages(store.selectedIds)}
+          >
+            删除
+          </button>
+          <button
+            type="button"
+            className="shrink-0 rounded px-1.5 py-[2px] hover:bg-brand-100"
+            onClick={() => void store.toggleFlag(store.selectedIds, '\\Seen', true)}
+          >
+            标记已读
+          </button>
+          <button
+            type="button"
+            className="shrink-0 rounded px-1.5 py-[2px] hover:bg-brand-100"
+            onClick={() => void store.toggleFlag(store.selectedIds, '\\Flagged', true)}
+          >
+            加星标
+          </button>
+          <button
+            type="button"
+            className="ml-auto shrink-0 rounded px-1.5 py-[2px] hover:bg-brand-100"
+            onClick={() => store.clearSelection()}
+          >
+            取消选择
+          </button>
+        </div>
+      )}
       <div className="flex h-[30px] shrink-0 items-center gap-1 border-b border-shell-line bg-[#fafbfc] px-2 text-[11px] text-shell-sub">
         <span className="max-w-[72px] shrink-0 truncate font-medium text-shell-text">{folder?.name ?? '邮件列表'}</span>
         <span className="shrink-0 whitespace-nowrap tabular-nums text-shell-faint">{messageTotal}</span>
@@ -381,6 +442,7 @@ export function MessageList() {
                   key={message.id}
                   message={message}
                   active={message.id === store.selectedMessageId}
+                  multi={store.selectedIds.includes(message.id) && store.selectedIds.length > 1}
                   onContext={openContextMenu}
                 />
               )))}

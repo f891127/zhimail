@@ -1,10 +1,11 @@
 /** 邮件简报中心：左侧按日报/周报/月报/自定义分组，右侧阅读与导出 */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { Icon } from '@/components/Icon';
 import { dateOnly, fullTime } from '@/lib/format';
 import { renderMarkdown } from '@/lib/markdown';
+import { ContextMenu } from '@/components/ContextMenu';
 
 const GROUPS = [
   { id: 'briefs/daily', label: '日报' },
@@ -14,6 +15,7 @@ const GROUPS = [
 ];
 
 export function BriefCenter() {
+  const [menu, setMenu] = useState<{ x: number; y: number; id: string; title: string } | null>(null);
   const store = useAppStore();
   const { briefs, briefGroup, selectedBriefId, aiBusy } = store;
 
@@ -82,6 +84,11 @@ export function BriefCenter() {
               key={brief.id}
               type="button"
               onClick={() => store.selectBrief(brief.id)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                store.selectBrief(brief.id);
+                setMenu({ x: event.clientX, y: event.clientY, id: brief.id, title: brief.title });
+              }}
               className={`flex w-full flex-col gap-1 border-b border-shell-lineSoft px-2.5 py-2 text-left transition-colors duration-120 ${
                 selected?.id === brief.id ? 'bg-brand-50' : 'hover:bg-brand-50/50'
               }`}
@@ -106,6 +113,32 @@ export function BriefCenter() {
               </div>
             </button>
           ))}
+          {menu && (
+            <ContextMenu
+              x={menu.x}
+              y={menu.y}
+              onClose={() => setMenu(null)}
+              items={[
+                { label: '打开这份简报', onClick: () => store.selectBrief(menu.id) },
+                {
+                  label: '导出为 Word',
+                  onClick: () => void store.exportBrief(menu.id, 'docx'),
+                },
+                {
+                  label: '导出为 HTML',
+                  onClick: () => void store.exportBrief(menu.id, 'html'),
+                },
+                { divider: true, label: '' },
+                {
+                  label: '删除本条简报',
+                  danger: true,
+                  onClick: () => {
+                    void store.removeBrief(menu.id);
+                  },
+                },
+              ]}
+            />
+          )}
         </div>
       </div>
 

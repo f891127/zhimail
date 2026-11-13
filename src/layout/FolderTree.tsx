@@ -189,6 +189,7 @@ export function FolderTree() {
   const commonRoot = folders.find((folder) => folder.id === 'common');
   const commonChildren = folders.filter((folder) => folder.parentId === 'common');
   const labelChildren = folders.filter((folder) => folder.parentId === 'common/labels');
+  const [briefsCollapsed, setBriefsCollapsed] = useState(false);
   const briefRoot = folders.find((folder) => folder.id === 'briefs');
   const briefGroups = folders.filter((folder) => folder.parentId === 'briefs');
 
@@ -365,12 +366,23 @@ export function FolderTree() {
             <button
               type="button"
               onClick={() => void selectFolder('briefs')}
+              onDoubleClick={(event) => {
+                // 双击「邮件简报」收起 / 展开下面的日/周/月/年报分组
+                event.preventDefault();
+                setBriefsCollapsed((value) => !value);
+              }}
+              title="双击收起 / 展开简报分组"
               className={`flex h-[27px] w-full items-center gap-1.5 px-2 text-left text-xs transition-colors duration-120 ${
                 view === 'briefs' && selectedFolderId === 'briefs'
                   ? 'bg-brand-500 text-white'
                   : 'text-shell-text hover:bg-black/[0.045]'
               }`}
             >
+              <Icon
+                name={briefsCollapsed ? 'chevron-right' : 'chevron-down'}
+                size={11}
+                className={view === 'briefs' && selectedFolderId === 'briefs' ? 'text-white/70' : 'text-shell-faint'}
+              />
               <Icon name="document" size={14} className="text-brand-600" />
               <span className="flex-1 font-medium">{tt('邮件简报')}</span>
               <span
@@ -381,7 +393,7 @@ export function FolderTree() {
                 {briefRoot.total}
               </span>
             </button>
-            {briefGroups.map((group) => (
+            {!briefsCollapsed && briefGroups.map((group) => (
               <FolderRow
                 key={group.id}
                 folder={group}

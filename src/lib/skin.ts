@@ -1,10 +1,10 @@
 /** 皮肤（主题）定义：每套皮肤对应 index.css 里的一组 CSS 变量 */
-export type SkinId = 'default' | 'gmail' | 'outlook' | 'foxmail' | 'filo' | 'notion' | 'neat';
+export type SkinId = 'default' | 'gmail' | 'outlook' | 'foxmail' | 'notion' | 'contrast';
 
 export interface SkinDef {
   id: SkinId;
   name: string;
-  /** 风格参考来源，展示在皮肤选择器里 */
+  /** 配色来源参考，展示在皮肤选择器里 */
   from: string;
   /** 选择器里的三色预览 */
   swatch: [string, string, string];
@@ -12,55 +12,49 @@ export interface SkinDef {
   note: string;
 }
 
+/** 皮肤统一按颜色命名 */
 export const SKINS: SkinDef[] = [
   {
     id: 'default',
-    name: '知邮蓝',
-    from: '默认',
-    swatch: ['#1f6fd0', '#e8541e', '#f5f6f7'],
+    name: '经典蓝',
+    from: '知邮默认',
+    swatch: ['#1f6fd0', '#e8541e', '#eef0f2'],
     note: '经典办公蓝，信息密度高',
   },
   {
     id: 'gmail',
-    name: 'Gmail',
-    from: 'Google',
-    swatch: ['#1a73e8', '#ea4335', '#f6f8fc'],
-    note: '冷白底 + 圆润蓝，清爽干净',
+    name: '天空蓝',
+    from: 'Gmail 风格',
+    swatch: ['#1a73e8', '#ea4335', '#e6f0fe'],
+    note: '冷白底 + 浅蓝工具栏，清爽干净',
   },
   {
     id: 'outlook',
-    name: 'Outlook',
-    from: 'Microsoft',
-    swatch: ['#0f6cbd', '#d13438', '#faf9f8'],
-    note: 'Fluent 蓝，线条克制、留白多',
+    name: '深海蓝',
+    from: 'Outlook 风格',
+    swatch: ['#0f6cbd', '#d13438', '#eae8e6'],
+    note: '深蓝主色，线条克制、留白多',
   },
   {
     id: 'foxmail',
-    name: 'Foxmail',
-    from: '腾讯',
-    swatch: ['#1b6ec2', '#f08300', '#eef1f4'],
-    note: '灰色工具栏 + 高对比分隔，老牌客户端味道',
-  },
-  {
-    id: 'filo',
-    name: 'Filo Mail',
-    from: 'Filo',
-    swatch: ['#6c5ce7', '#ff6b81', '#f7f5ff'],
-    note: '紫色系，柔和的淡紫底',
+    name: '灰蓝',
+    from: 'Foxmail 风格',
+    swatch: ['#1b6ec2', '#f08300', '#dde4ea'],
+    note: '灰色工具栏 + 灰蓝分隔，老牌客户端味道',
   },
   {
     id: 'notion',
-    name: 'Notion Mail',
-    from: 'Notion',
-    swatch: ['#37352f', '#2383e2', '#fbfbfa'],
-    note: '极简黑白 + 一点点蓝，安静耐看',
+    name: '极简黑',
+    from: 'Notion 风格',
+    swatch: ['#37352f', '#2383e2', '#f1f1ef'],
+    note: '黑灰主色 + 一点点蓝，安静耐看',
   },
   {
-    id: 'neat',
-    name: 'Neat Mail AI',
-    from: 'Neat',
-    swatch: ['#0f9d76', '#f5a524', '#f4f9f7'],
-    note: '薄荷绿，AI 产品常见的科技感',
+    id: 'contrast',
+    name: '高对比黑',
+    from: '无障碍 / 强对比',
+    swatch: ['#0b4fd0', '#c1121f', '#ffffff'],
+    note: '纯白底 + 纯黑字 + 深色分隔线，弱光或老花眼更清楚',
   },
 ];
 

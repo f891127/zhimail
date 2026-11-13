@@ -224,13 +224,14 @@ function scopeLabel(params: RangeAnalysisParams): string {
 export function collectRangeMessages(params: RangeAnalysisParams): MessageMeta[] {
   const options: Parameters<typeof store.listMessagesInRange>[2] = {};
   if (params.scope === 'folder' && params.folderId) options.folderId = params.folderId;
+  if (params.scope === 'account' && params.accountId) options.accountId = params.accountId;
   if (params.scope === 'filtered') {
     if (params.from) options.from = params.from;
     if (params.keyword) options.keyword = params.keyword;
   }
   const messages = store.listMessagesInRange(params.rangeStart, params.rangeEnd, options);
   // 收件箱范围默认排除已删除与草稿
-  if (params.scope === 'inbox' || params.scope === 'all') {
+  if (params.scope === 'inbox' || params.scope === 'all' || params.scope === 'account') {
     return messages.filter((meta) => {
       const folder = store.getFolder(meta.folderId);
       return folder ? !['trash', 'draft'].includes(folder.kind) : true;
@@ -239,18 +240,89 @@ export function collectRangeMessages(params: RangeAnalysisParams): MessageMeta[]
   return messages;
 }
 
+/** 本地统计版简报：不调用大模型，只用邮件元数据生成结构化汇总 */
+function localAnalysis(
+  params: RangeAnalysisParams,
+  messages: MessageMeta[],
+  stats: ReturnType<typeof buildStats>,
+): RangeAnalysis {
+  const range = rangeLabel(params.rangeStart, params.rangeEnd);
+  const unread = messages.filter((meta) => !meta.flags.includes('\\Seen'));
+  const withAttachment = messages.filter((meta) => meta.hasAttachments);
+  const urgent = messages.filter((meta) =>
+    /(请|审批|确认|回复|截止|紧急|待办|期限|提醒)/.test(meta.subject),
+  );
+  const lines: string[] = [];
+  lines.push(`## 一、总体概况`);
+  lines.push(
+    `- 时间范围：${range}`,
+    `- 邮件总数：${stats.total} 封（未读 ${stats.unread} 封，含附件 ${stats.withAttachment} 封）`,
+    `- 邮件最多的一天：${stats.busiestDay.day}（${stats.busiestDay.count} 封）`,
+    `- 说明：本简报由本地统计生成（未配置 AI Key），只统计元数据，不解析正文。`,
+  );
+  lines.push(`\n## 二、发件人分布`);
+  lines.push(stats.senders.map((item) => `- ${item.name}：${item.count} 封`).join('\n') || '- 无');
+  lines.push(`\n## 三、需要优先查看（${Math.min(urgent.length, 12)} 条）`);
+  lines.push(
+    urgent
+      .slice(0, 12)
+      .map((meta) => `- ${formatDate(meta.date).slice(0, 10)}｜${formatAddress(meta.from)}｜${meta.subject}`)
+      .join('\n') || '- 无',
+  );
+  lines.push(`\n## 四、未读邮件（${Math.min(unread.length, 12)} 条）`);
+  lines.push(
+    unread
+      .slice(0, 12)
+      .map((meta) => `- ${formatDate(meta.date).slice(0, 10)}｜${formatAddress(meta.from)}｜${meta.subject}`)
+      .join('\n') || '- 无',
+  );
+  lines.push(`\n## 五、附件清单（${Math.min(withAttachment.length, 12)} 条）`);
+  lines.push(
+    withAttachment
+      .slice(0, 12)
+      .map((meta) => `- ${meta.subject}（${formatAddress(meta.from)}）`)
+      .join('\n') || '- 无',
+  );
+  lines.push(
+    `\n> 想要 AI 写的结论、风险判断与待办拆解，请到「设置 → AI 助手」填写 API Key 后重新生成。`,
+  );
+
+  const todos: TodoDraft[] = urgent.slice(0, 8).map((meta) => ({
+    title: meta.subject.slice(0, 60),
+    detail: `${formatAddress(meta.from)}｜${formatDate(meta.date).slice(0, 10)}`,
+    priority: meta.flags.includes('\\Seen') ? 'medium' : 'high',
+    sourceMessageId: meta.id,
+  }));
+
+  return {
+    markdown: lines.join('\n'),
+    stats,
+    messageIds: messages.map((meta) => meta.id),
+    todos,
+    batches: 0,
+    model: '本地统计',
+    provider: 'local',
+  };
+}
+
 export async function analyzeRange(
   params: RangeAnalysisParams,
   hooks?: { onProgress?: (message: string) => void },
 ): Promise<RangeAnalysis> {
   const { settings, options } = resolveOptions();
-  requireKey(settings);
 
   const messages = collectRangeMessages(params).sort((a, b) => b.date - a.date);
   if (!messages.length) {
     throw new AIError('empty', '所选时间范围内没有邮件，请调整时间范围或分析范围');
   }
   const stats = buildStats(messages);
+
+  // 未配置大模型时不再直接失败，改为生成「统计版简报」：邮件量、发件人、待关注邮件都在本地算
+  if (!settings.model?.trim() || (!options.apiKey && settings.provider !== 'ollama')) {
+    hooks?.onProgress?.('未配置 AI Key，已改为本地统计版简报');
+    return localAnalysis(params, messages, stats);
+  }
+  requireKey(settings);
   const scope = scopeLabel(params);
   const range = rangeLabel(params.rangeStart, params.rangeEnd);
   const statsLine = `共 ${stats.total} 封（未读 ${stats.unread} 封，含附件 ${stats.withAttachment} 封）；邮件量最高的一天：${stats.busiestDay.day}（${stats.busiestDay.count} 封）；主要发件人：${stats.senders

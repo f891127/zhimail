@@ -58,7 +58,9 @@ export async function generateBrief(
   const id = `brief-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
 
   const scopeText =
-    params.scope === 'folder'
+    params.scope === 'account'
+      ? `账户「${store.getAccount(params.accountId ?? '')?.name ?? '指定账户'}」收件箱`
+      : params.scope === 'folder'
       ? `文件夹「${store.getFolder(params.folderId ?? '')?.name ?? '指定文件夹'}」`
       : params.scope === 'inbox'
         ? '全部账户收件箱'

@@ -21,6 +21,7 @@ export function ToolBar() {
     openCompose,
     replyToMessage,
     deleteMessages,
+    selectedIds,
     toggleFlag,
     syncNow,
     syncAll,
@@ -138,7 +139,10 @@ export function ToolBar() {
           type="button"
           className="tool-btn"
           disabled={!selectedMessageId}
-          onClick={() => selectedMessageId && void deleteMessages([selectedMessageId])}
+          onClick={() => {
+            const ids = selectedIds.length > 1 ? selectedIds : selectedMessageId ? [selectedMessageId] : [];
+            if (ids.length) void deleteMessages(ids);
+          }}
           title="删除 (Delete)"
         >
           <Icon name="trash" size={15} />

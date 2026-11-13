@@ -30,6 +30,7 @@ export function MenuBar() {
     openCompose,
     syncNow,
     deleteMessages,
+    selectedIds,
     toggleFlag,
     setThreadMode,
     loadMessages,
@@ -94,7 +95,10 @@ export function MenuBar() {
         label: tt('删除邮件'),
         shortcut: 'Delete',
         onClick: () => {
-          if (selectedMessageId) void deleteMessages([selectedMessageId]);
+          {
+            const ids = selectedIds.length > 1 ? selectedIds : selectedMessageId ? [selectedMessageId] : [];
+            if (ids.length) void deleteMessages(ids);
+          }
         },
         disabled: !selectedMessageId,
       },

@@ -100,29 +100,6 @@ html[data-skin="foxmail"] {
     --c-shell-faint: 138 148 158;
 }
 /* Filo Mail */
-html[data-skin="filo"] {
-    --c-brand-50: 243 242 253;
-    --c-brand-100: 229 226 251;
-    --c-brand-200: 199 193 246;
-    --c-brand-300: 167 157 241;
-    --c-brand-400: 134 121 235;
-    --c-brand-500: 108 92 231;
-    --c-brand-600: 93 79 199;
-    --c-brand-700: 78 66 166;
-    --c-brand-800: 63 53 134;
-    --c-brand-900: 48 40 102;
-    --c-accent-400: 255 131 149;
-    --c-accent-500: 255 107 129;
-    --c-accent-600: 214 90 108;
-    --c-shell-bg: 247 245 255;
-    --c-shell-panel: 255 255 255;
-    --c-shell-chrome: 233 226 255;
-    --c-shell-line: 213 201 245;
-    --c-shell-lineSoft: 236 231 251;
-    --c-shell-text: 43 37 64;
-    --c-shell-sub: 106 98 133;
-    --c-shell-faint: 152 145 176;
-}
 /* Notion Mail */
 html[data-skin="notion"] {
     --c-brand-50: 239 239 238;
@@ -148,30 +125,36 @@ html[data-skin="notion"] {
     --c-shell-faint: 155 154 151;
 }
 /* Neat Mail AI */
-html[data-skin="neat"] {
-    --c-brand-50: 236 247 244;
-    --c-brand-100: 212 237 230;
-    --c-brand-200: 164 218 203;
-    --c-brand-300: 111 196 173;
-    --c-brand-400: 58 175 143;
-    --c-brand-500: 15 157 118;
-    --c-brand-600: 13 135 101;
-    --c-brand-700: 11 113 85;
-    --c-brand-800: 9 91 68;
-    --c-brand-900: 7 69 52;
-    --c-accent-400: 247 179 71;
-    --c-accent-500: 245 165 36;
-    --c-accent-600: 206 139 30;
-    --c-shell-bg: 244 249 247;
+
+html[data-skin="contrast"] {
+    --c-brand-50: 235 241 251;
+    --c-brand-100: 216 227 247;
+    --c-brand-200: 172 195 239;
+    --c-brand-300: 123 160 230;
+    --c-brand-400: 70 121 219;
+    --c-brand-500: 11 79 208;
+    --c-brand-600: 10 70 183;
+    --c-brand-700: 8 60 158;
+    --c-brand-800: 7 51 133;
+    --c-brand-900: 6 41 108;
+    --c-accent-400: 193 18 31;
+    --c-accent-500: 193 18 31;
+    --c-accent-600: 193 18 31;
+    --c-shell-bg: 255 255 255;
     --c-shell-panel: 255 255 255;
-    --c-shell-chrome: 220 240 232;
-    --c-shell-line: 198 226 215;
-    --c-shell-lineSoft: 231 241 236;
-    --c-shell-text: 22 48 42;
-    --c-shell-sub: 77 107 98;
-    --c-shell-faint: 138 167 157;
+    --c-shell-chrome: 236 236 236;
+    --c-shell-line: 107 107 107;
+    --c-shell-lineSoft: 181 181 181;
+    --c-shell-text: 0 0 0;
+    --c-shell-sub: 31 31 31;
+    --c-shell-faint: 77 77 77;
 }
 
+/* 高对比皮肤：加粗分隔线、放大正文对比 */
+html[data-skin="contrast"] .border-shell-line { border-color: rgb(107 107 107); }
+html[data-skin="contrast"] .border-shell-lineSoft { border-color: rgb(181 181 181); }
+html[data-skin="contrast"] .tool-btn,
+html[data-skin="contrast"] .ghost-btn { border-color: rgb(107 107 107); }
 
 @layer base {
   html,

@@ -232,8 +232,10 @@ export interface RangeAnalysisParams {
   rangeStart: number;
   rangeEnd: number;
   /** 分析范围：当前文件夹 / 全部收件箱 / 自定义筛选 */
-  scope: 'folder' | 'inbox' | 'all' | 'filtered';
+  scope: 'folder' | 'inbox' | 'all' | 'filtered' | 'account';
   folderId?: string;
+  /** scope=account 时限定某个邮箱账户 */
+  accountId?: string;
   from?: string;
   keyword?: string;
   /** 是否顺带生成简报 */

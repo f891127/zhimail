@@ -178,6 +178,42 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
       })()`,
       waitMs: 1800,
     },
+    {
+      name: '01e-multi-select',
+      script: `(() => {
+        let tries = 0;
+        const tick = () => {
+          const rows = Array.from(document.querySelectorAll('div.cursor-default'));
+          if (rows.length >= 4) {
+            rows[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            setTimeout(() => {
+              rows[3].dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+            }, 250);
+            return;
+          }
+          if (tries++ < 60) setTimeout(tick, 100);
+        };
+        tick();
+        return true;
+      })()`,
+      waitMs: 2200,
+    },
+    {
+      name: '03b-brief-menu',
+      script: `(() => {
+        window.__zhimailDev?.showBriefs?.();
+        setTimeout(() => {
+          const rows = Array.from(document.querySelectorAll('button')).filter((b) => /简报/.test(b.textContent || ''));
+          const target = rows[rows.length - 1];
+          if (target) {
+            const rect = target.getBoundingClientRect();
+            target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: rect.left + 60, clientY: rect.top + 20 }));
+          }
+        }, 700);
+        return true;
+      })()`,
+      waitMs: 2200,
+    },
     { name: '02-ai-panel', script: 'window.__zhimailDev?.showAI?.()' },
     {
       name: '02b-analysis',

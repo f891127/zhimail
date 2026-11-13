@@ -45,7 +45,13 @@ export function AIAssistantPanel() {
   const [preset, setPreset] = useState<RangePresetId>('last7');
   const [startDate, setStartDate] = useState(toDateInput(Date.now() - 7 * 86400000));
   const [endDate, setEndDate] = useState(toDateInput(Date.now()));
-  const [scope, setScope] = useState<RangeAnalysisParams['scope']>(analysisParams.scope ?? 'inbox');
+  // 分析范围：inbox / all / folder / filtered，或 account:<账户 id>
+  const [scope, setScope] = useState<string>(
+    analysisParams.scope === 'account' && analysisParams.accountId
+      ? `account:${analysisParams.accountId}`
+      : (analysisParams.scope ?? 'inbox'),
+  );
+  const accountScopeId = scope.startsWith('account:') ? scope.slice('account:'.length) : undefined;
   const [filterFrom, setFilterFrom] = useState('');
   const [filterKeyword, setFilterKeyword] = useState('');
   const [copied, setCopied] = useState(false);
@@ -60,12 +66,13 @@ export function AIAssistantPanel() {
     return {
       rangeStart: range.start,
       rangeEnd: range.end,
-      scope,
+      scope: (accountScopeId ? 'account' : scope) as RangeAnalysisParams['scope'],
+      accountId: accountScopeId,
       folderId: scope === 'folder' ? selectedFolderId ?? undefined : undefined,
       from: scope === 'filtered' ? filterFrom || undefined : undefined,
       keyword: scope === 'filtered' ? filterKeyword || undefined : undefined,
     };
-  }, [preset, startDate, endDate, scope, selectedFolderId, filterFrom, filterKeyword]);
+  }, [preset, startDate, endDate, scope, accountScopeId, selectedFolderId, filterFrom, filterKeyword]);
 
   const analysis = aiOutputs.analysis;
   const replies = aiOutputs.replies;
@@ -216,8 +223,13 @@ export function AIAssistantPanel() {
 
             <div>
               <div className="mb-1 text-[11px] font-medium text-shell-sub">分析范围</div>
-              <select value={scope} onChange={(event) => setScope(event.target.value as RangeAnalysisParams['scope'])} className="field py-1">
+              <select value={scope} onChange={(event) => setScope(event.target.value)} className="field py-1">
                 <option value="inbox">全部账户收件箱</option>
+                {store.accounts.map((account) => (
+                  <option key={account.id} value={`account:${account.id}`}>
+                    账户：{account.name}（{account.email}）
+                  </option>
+                ))}
                 <option value="all">全部邮件（含已发送）</option>
                 <option value="folder">当前文件夹{currentFolder ? `（${currentFolder.name}）` : ''}</option>
                 <option value="filtered">自定义筛选</option>

@@ -5,6 +5,7 @@
 
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
+import iconv from 'iconv-lite';
 import type { ParsedMail } from 'mailparser';
 import type { AddressObject } from 'mailparser';
 import { decryptSecret } from './crypto';
@@ -52,6 +53,7 @@ function textScore(text: string): number {
     if (code < 128) score += 1;
     else if (code >= 0x4e00 && code <= 0x9fff) score += 3; // 常用汉字
     else if (code >= 0x3000 && code <= 0x303f) score += 2; // 中文标点
+    else if (code >= 0xff61 && code <= 0xff9f) score -= 6; // 半角片假名：GBK 被当成 Shift_JIS 解码的典型症状
     else if (code >= 0xff00 && code <= 0xffef) score += 1; // 全角符号
     else if (code === 0xfffd || code === 0x25c6 || code === 0x25a1 || code === 0x25a0) score -= 8;
     else if (code >= 0x3400 && code <= 0x4dbf) score -= 4; // 生僻扩展 A，常见于错位解码
@@ -60,6 +62,73 @@ function textScore(text: string): number {
     else score -= 1;
   }
   return score;
+}
+
+/** 常用汉字表：用于判断一段文字像不像正常中文（取自项目内自然语言文本的高频字） */
+const COMMON_HANZI = '件邮文的新用与动置在时报本自更示一户不可要中发已复设成出数会前简为回据版正接生同安下后装夹模周日开重次分未内存务到查启账写标按待定保需读份并箱关提程取器作有备面式入点显间口当认选除办录步主化行服收是条目型建方地统包部译单窗明现封月无删期失知表序析话请余度附检题人最上结额容项全完败密即载持翻键列解码每证或客于使常确端原大格名应栏加手义理个进摘助预试整组空连默能系导天换总测支操配否索说汇批界打览送改工案事把通先直含态量合求址立留排这信对阅多位线再议字验增三状免源语输只清级闭击计任菌体记果制返图灭调退看星真过切没布转范具围稿搜法言实草第右填优编机见菜错恢签展演构商台供我志近超号误业段小其页以移引压被交消运里来则年修板避类该询续此择处长高便场首也始串注顺力变例意判如隐钮效刷及截词替权归皮肤弹区辑由问至元异仅等管英参控断郵产指审略储给找心从相渲染档覆像讯企网所电锅流性共因房做升了秒响侧擎凭镜执代忽二还头气节依册携盘钟带医外隔致添聚树两尚功勾盖授限库暂息影帮照推视称放层私句论今专您声浏路院抽联去样底独快准你腾兼质各风环醒评停们价藏角若片色随值止四另秀杰温公比仓品算基核货物向起均费缩补协历锁械责延它双都左筛普跳掉官仍强智垃圾采门造付王丽剂圈约桌白然种紧就充辅捷登史昨旧料初拉告泵好走顶兜适拟符低际跟划差络何音境链落老答李博培域继焦局宽创平些往较插景别占员逐赖触托缺少蓝达匹火追阶曲华疗蒸汽险百悬反静软套框命子将受早几急金逾五得许术者净戳束经磁块跨且径特脉涉国孙倩千集屏虚销获访速润扩概必降频暴露缀設讀辦干科技资他象殊传迁规久拒书警热估东阳偏刘仁济诉遮罩馈抄哪赠严精粗识须之允探钥齐那纯繁顯標订某湿绝础非纠乱身况逻敏溯研水阀察硅混材训师张壳轻稍撤车沙脚绪纳冗六吗刻尝但终护深刚而根體項簡報為映射和感临却锚播微阿举满情校硬养陈毒足勘贵晓芸架万川突缓舟帆洁友禁靠铺决卡细背才般毫率挪望永详让號資錄結檢單產尋譯關刪對話典牌道住监拿短针享唯滤易云枚僻踢堆防负赵踪午迟剩承燥漏海形室谢奏冲贴释拦山豆谱飞零跃辰什么歧固徽';
+const COMMON_HANZI_SET = new Set(COMMON_HANZI);
+
+/** 文本「像正常中文」的程度：常用字加分，半角片假名 / 替换符 / 生僻字减分 */
+export function plausibility(text: string): number {
+  if (!text) return 0;
+  let score = 0;
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code < 128) score += 1;
+    else if (code >= 0x4e00 && code <= 0x9fff) score += COMMON_HANZI_SET.has(ch) ? 3 : -1;
+    else if (code >= 0x3000 && code <= 0x303f) score += 2;
+    else if (code >= 0xff61 && code <= 0xff9f) score -= 6;
+    else if (code === 0xfffd) score -= 10;
+    else if (code >= 0xff00 && code <= 0xffef) score += 0.5;
+    else if (code >= 0x0400 && code <= 0x04ff) score -= 3;
+    else score -= 1;
+  }
+  return score;
+}
+
+/**
+ * 纠正乱码：把「用错编码解码出来的字符串」按错误编码还原成字节，再用正确编码解一次，
+ * 用常用字比例判断哪个结果最像正常中文。覆盖：
+ *  1) GBK/GB2312 正文被当成 Shift_JIS 解码 → 满屏半角片假名与「◇」；
+ *  2) UTF-8 正文被当成 latin1/windows-1252 解码 → 「ä¸­æ–‡」式乱码。
+ */
+export function repairMojibake(text: string | undefined | null): string {
+  if (!text) return text ?? '';
+  if (!/[\u0080-\uffff]/.test(text)) return text;
+  const base = plausibility(text);
+  let best = text;
+  let bestScore = base;
+  const wrongList = /[\uff61-\uff9f]/.test(text) ? ['shift_jis', 'euc-jp'] : ['latin1', 'windows-1252'];
+  for (const wrong of wrongList) {
+    let bytes: Buffer;
+    try {
+      bytes = iconv.encode(text, wrong);
+    } catch {
+      continue;
+    }
+    if (!bytes.length) continue;
+    for (const right of ['utf-8', 'gb18030', 'big5']) {
+      let fixed: string;
+      try {
+        fixed = iconv.decode(bytes, right);
+      } catch {
+        continue;
+      }
+      if (!fixed || fixed === text) continue;
+      // 字节往返必须无损，否则说明还原过程丢信息
+      try {
+        if (!iconv.encode(fixed, right).equals(bytes)) continue;
+      } catch {
+        continue;
+      }
+      const score = plausibility(fixed);
+      if (score > bestScore + Math.max(6, text.length * 0.05)) {
+        best = fixed;
+        bestScore = score;
+      }
+    }
+  }
+  return best;
 }
 
 /** 判定解析结果是否明显乱码（大量生僻字 / 替换符 / ◆） */
@@ -83,16 +152,24 @@ function declaredCharset(source: Buffer): string {
   return (match?.[1] ?? '').toLowerCase();
 }
 
-/** 把邮件头里的 charset 声明改成 utf-8，用于纠正「声明 gb2312、实际是 UTF-8」的邮件 */
-function forceUtf8Source(source: Buffer): Buffer {
+/** 把邮件头里的 charset 声明统一改写成指定编码，用于纠正声明与实际不一致的邮件 */
+function forceCharsetSource(source: Buffer, charset: string): Buffer {
   const crlf = source.indexOf('\r\n\r\n');
   const lf = source.indexOf('\n\n');
   const index = crlf >= 0 ? crlf : lf;
   const separator = crlf >= 0 ? '\r\n\r\n' : '\n\n';
   if (index < 0) return source;
   const headers = source.subarray(0, index).toString('latin1');
-  if (!/charset\s*=/i.test(headers)) return source;
-  const fixed = headers.replace(/charset\s*=\s*"?[\w.\-]+"?/gi, 'charset="utf-8"');
+  let fixed = headers;
+  if (/charset\s*=/i.test(headers)) {
+    fixed = headers.replace(/charset\s*=\s*"?[\w.\-]+"?/gi, `charset="${charset}"`);
+  } else if (/content-type:\s*text\/plain/i.test(headers)) {
+    fixed = headers.replace(/(content-type:\s*text\/plain[^\r\n]*)/i, `$1; charset="${charset}"`);
+  } else if (/content-type:\s*text\/html/i.test(headers)) {
+    fixed = headers.replace(/(content-type:\s*text\/html[^\r\n]*)/i, `$1; charset="${charset}"`);
+  } else {
+    return source;
+  }
   return Buffer.concat([
     Buffer.from(fixed, 'latin1'),
     Buffer.from(separator, 'latin1'),
@@ -111,27 +188,38 @@ export async function parseMessageSource(source: Buffer | string): Promise<Parse
   const parsed = await simpleParser(buffer);
 
   const charset = declaredCharset(buffer);
-  if (charset === 'utf-8' || charset === 'utf8') return parsed;
+  if (charset === 'utf-8' || charset === 'utf8') return applyRepair(parsed);
 
   const plain = parsed.text ?? '';
   const htmlText = typeof parsed.html === 'string' ? parsed.html.replace(/<[^>]+>/g, ' ') : '';
   const broken = looksBroken(plain + htmlText);
   // 原文是合法 UTF-8 却声明成别的编码，是中文企业邮件的典型问题，直接按 UTF-8 重解析
   const utf8Source = isLikelyUtf8(buffer);
-  if (!broken && !utf8Source) return parsed;
+  if (!broken && !utf8Source) return applyRepair(parsed);
 
-  try {
-    const retried = await simpleParser(forceUtf8Source(buffer));
-    const retriedPlain = retried.text ?? '';
-    const retriedHtml = typeof retried.html === 'string' ? retried.html.replace(/<[^>]+>/g, ' ') : '';
-    const better = textScore(retriedPlain + retriedHtml) >= textScore(plain + htmlText);
-    if (better) {
-      parsed.text = retried.text;
-      if (retried.html) parsed.html = retried.html;
+  const baseScore = textScore(plain + htmlText);
+  for (const charset of ['utf-8', 'gb18030'] as const) {
+    try {
+      const retried = await simpleParser(forceCharsetSource(buffer, charset));
+      const retriedPlain = retried.text ?? '';
+      const retriedHtml = typeof retried.html === 'string' ? retried.html.replace(/<[^>]+>/g, ' ') : '';
+      if (textScore(retriedPlain + retriedHtml) > baseScore) {
+        parsed.text = retried.text;
+        if (retried.html) parsed.html = retried.html;
+        break;
+      }
+    } catch {
+      /* 纠正失败时保留原结果 */
     }
-  } catch {
-    /* 纠正失败时保留原结果 */
   }
+  return applyRepair(parsed);
+}
+
+/** 对解析结果的文本部分做一次乱码纠正 */
+function applyRepair(parsed: ParsedMail): ParsedMail {
+  if (typeof parsed.text === 'string') parsed.text = repairMojibake(parsed.text);
+  if (typeof parsed.html === 'string') parsed.html = repairMojibake(parsed.html);
+  if (typeof parsed.subject === 'string') parsed.subject = repairMojibake(parsed.subject);
   return parsed;
 }
 

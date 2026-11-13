@@ -84,6 +84,10 @@ export function ChangelogDialog() {
   if (!changelogOpen) return null;
 
   const highlightEntry = changelogHighlight ? findChangelogEntry(changelogHighlight) : undefined;
+  // 只保留当前版本（或刚升级到的那一版）的更新说明
+  const versionKey = (changelogHighlight ?? currentVersion).replace(/^v/, '');
+  const matched = entries.filter((entry) => entry.version === versionKey);
+  const visibleEntries = matched.length ? matched : entries.slice(0, 1);
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/25 p-6 animate-fade-in">
@@ -111,14 +115,14 @@ export function ChangelogDialog() {
         )}
 
         <div className="scroll-area flex-1 space-y-2 p-3">
-          {entries.map((entry) => (
+          {visibleEntries.map((entry) => (
             <EntryBlock
               key={entry.version}
               entry={entry}
               current={entry.version === currentVersion.replace(/^v/, '')}
               highlighted={entry.version === (changelogHighlight ?? '').replace(/^v/, '')}
-              expanded={expanded === entry.version}
-              onToggle={() => setExpanded(expanded === entry.version ? null : entry.version)}
+              expanded
+              onToggle={() => undefined}
             />
           ))}
           {entries.length === 0 && <p className="px-2 py-6 text-center text-xs text-shell-faint">暂无更新日志</p>}

@@ -145,7 +145,14 @@ interface State {
   selectAccount: (accountId: string) => void;
   toggleAccount: (accountId: string) => void;
   loadMessages: () => Promise<void>;
-  selectMessage: (id: string) => Promise<void>;
+  /** 选中邮件；按住 Shift 选连续区间，按住 Ctrl/⌘ 点选多封 */
+  selectMessage: (id: string, modifiers?: { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean }) => Promise<void>;
+  /** 多选中的邮件 id（含当前选中那封） */
+  selectedIds: string[];
+  /** Shift 连选的起点 */
+  selectionAnchor: string | null;
+  clearSelection: () => void;
+  selectAllVisible: () => void;
   toggleFlag: (ids: string[], flag: string, value: boolean) => Promise<void>;
   deleteMessages: (ids: string[]) => Promise<void>;
   moveMessages: (ids: string[], folderId: string) => Promise<void>;
@@ -277,6 +284,8 @@ export const useAppStore = create<State>((set, get) => ({
   messages: [],
   messageTotal: 0,
   selectedMessageId: null,
+  selectedIds: [],
+  selectionAnchor: null,
   selectedMessage: null,
   loadingMessages: false,
 
@@ -436,6 +445,20 @@ export const useAppStore = create<State>((set, get) => ({
         if (first) set({ selectedBriefId: first.id });
       },
       showTodos: () => set({ view: 'todos', aiPanelOpen: false }),
+      /** 截图用：选中前 N 封，验证多选样式 */
+      selectMulti: (count = 3) => {
+        void (async () => {
+          if (!get().messages.length) await get().loadMessages();
+          const ids = get().messages.slice(0, count).map((item) => item.id);
+          set({
+            view: 'mail',
+            aiPanelOpen: false,
+            selectedIds: ids,
+            selectedMessageId: ids[0] ?? null,
+            selectionAnchor: ids[0] ?? null,
+          });
+        })();
+      },
       showUpdateDialog: () => {
         set({ updateDialogOpen: true });
         void get().checkUpdate();
@@ -519,10 +542,31 @@ export const useAppStore = create<State>((set, get) => ({
     }
   },
 
-  selectMessage: async (id: string) => {
+  selectMessage: async (id, modifiers) => {
     const cachedTranslation = get().aiOutputs.translate;
+    const state = get();
+    const conversation = (state.settings?.mail?.listMode ?? 'conversation') === 'conversation';
+    const order =
+      conversation && state.threads.length
+        ? state.threads.map((thread) => thread.messages[thread.messages.length - 1]?.id).filter(Boolean)
+        : state.messages.map((item) => item.id);
+    const additive = Boolean(modifiers?.ctrlKey || modifiers?.metaKey);
+    let ids: string[];
+    if (modifiers?.shiftKey && state.selectionAnchor) {
+      const from = order.indexOf(state.selectionAnchor);
+      const to = order.indexOf(id);
+      ids = from >= 0 && to >= 0 ? order.slice(Math.min(from, to), Math.max(from, to) + 1) : [id];
+    } else if (additive) {
+      ids = state.selectedIds.includes(id)
+        ? state.selectedIds.filter((item) => item !== id)
+        : [...state.selectedIds, id];
+    } else {
+      ids = [id];
+    }
     set({
       selectedMessageId: id,
+      selectedIds: ids,
+      selectionAnchor: modifiers?.shiftKey ? state.selectionAnchor : id,
       selectedMessage: null,
       translationVisible: Boolean(cachedTranslation && cachedTranslation.id === id),
     });
@@ -545,6 +589,11 @@ export const useAppStore = create<State>((set, get) => ({
     }
   },
 
+  clearSelection: () => set({ selectedIds: [], selectionAnchor: null, selectedMessageId: null, selectedMessage: null }),
+  selectAllVisible: () => {
+    const ids = get().messages.map((item) => item.id);
+    set({ selectedIds: ids, selectedMessageId: ids[0] ?? null, selectionAnchor: ids[0] ?? null });
+  },
   toggleFlag: async (ids, flag, value) => {
     const folders = await api.messages.setFlags({ ids, flag, value });
     set((state) => ({
@@ -566,14 +615,34 @@ export const useAppStore = create<State>((set, get) => ({
     }));
   },
 
-  deleteMessages: async (ids) => {
+  deleteMessages: async (rawIds) => {
+    // 会话模式下选中的是「会话行」，删除时展开成整串邮件
+    const threads = get().threads;
+    const ids = Array.from(
+      new Set(
+        rawIds.flatMap((id) => {
+          const thread = threads.find((item) => item.messages[item.messages.length - 1]?.id === id);
+          return thread ? thread.messages.map((message) => message.id) : [id];
+        }),
+      ),
+    );
     const folders = await api.messages.remove(ids);
     set((state) => ({
       folders,
       messages: state.messages.filter((item) => !ids.includes(item.id)),
+      // 会话视图也要同步剔除，否则会话模式下删除后列表不刷新
+      threads: state.threads
+        .map((thread) => ({
+          ...thread,
+          messages: thread.messages.filter((item) => !ids.includes(item.id)),
+        }))
+        .filter((thread) => thread.messages.length > 0),
       selectedMessageId: ids.includes(state.selectedMessageId ?? '') ? null : state.selectedMessageId,
       selectedMessage: ids.includes(state.selectedMessageId ?? '') ? null : state.selectedMessage,
+      selectedIds: state.selectedIds.filter((item) => !ids.includes(item)),
     }));
+    // 再按仓储结果重算一次列表与计数，保证与磁盘一致
+    await get().loadMessages();
     get().pushToast({ type: 'info', title: `已删除 ${ids.length} 封邮件` });
   },
 
@@ -585,7 +654,15 @@ export const useAppStore = create<State>((set, get) => ({
       messages: state.messages.filter((item) => !ids.includes(item.id)),
       selectedMessageId: ids.includes(state.selectedMessageId ?? '') ? null : state.selectedMessageId,
       selectedMessage: ids.includes(state.selectedMessageId ?? '') ? null : state.selectedMessage,
+      threads: state.threads
+        .map((thread) => ({
+          ...thread,
+          messages: thread.messages.filter((item) => !ids.includes(item.id)),
+        }))
+        .filter((thread) => thread.messages.length > 0),
+      selectedIds: state.selectedIds.filter((item) => !ids.includes(item)),
     }));
+    await get().loadMessages();
     get().pushToast({ type: 'info', title: `已移动 ${ids.length} 封邮件到「${target?.name ?? '目标文件夹'}」` });
   },
 

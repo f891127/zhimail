@@ -326,8 +326,10 @@ export interface Brief {
 export interface RangeAnalysisParams {
   rangeStart: number;
   rangeEnd: number;
-  scope: 'folder' | 'inbox' | 'all' | 'filtered';
+  scope: 'folder' | 'inbox' | 'all' | 'filtered' | 'account';
   folderId?: string;
+  /** scope=account 时限定某个邮箱账户 */
+  accountId?: string;
   from?: string;
   keyword?: string;
   makeBrief?: boolean;
@@ -593,6 +595,7 @@ declare global {
     __zhimailDev?: {
       setSkin?: (id: string) => void;
       showUpdateDialog?: () => void;
+      selectMulti?: (count?: number) => void;
       showMail?: () => void;
       showSettings?: (tab?: string) => void;
       maximizeAIPanel?: () => void;

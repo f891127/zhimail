@@ -165,10 +165,6 @@ export class BriefScheduler {
     const schedules = (settings.schedules ?? []).filter((schedule) => schedule.enabled);
     if (schedules.length === 0) return [];
 
-    if (!store.getSettings().ai.hasApiKey) {
-      this.onError?.('自动简报已开启，但尚未配置 AI API Key');
-      return [];
-    }
 
     const results: ScheduleRunResult[] = [];
     this.running = true;
@@ -189,9 +185,6 @@ export class BriefScheduler {
   async runNow(scheduleId: string, now = new Date()): Promise<ScheduleRunResult> {
     const schedule = (store.getSettings().brief.schedules ?? []).find((item) => item.id === scheduleId);
     if (!schedule) return { scheduleId, scheduleName: '', error: '未找到该简报排程' };
-    if (!store.getSettings().ai.hasApiKey) {
-      return { scheduleId, scheduleName: schedule.name, error: '尚未配置 AI API Key' };
-    }
     if (this.running) return { scheduleId, scheduleName: schedule.name, error: '已有简报正在生成，请稍后再试' };
     const period = computePeriod(schedule, now);
     this.running = true;
