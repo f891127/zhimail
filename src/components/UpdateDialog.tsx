@@ -20,6 +20,8 @@ export function UpdateDialog() {
   }, [updateDialogOpen, updateState, checkUpdate]);
 
   if (!updateDialogOpen) return null;
+  // 开始安装后自动让位给安装进度遮罩，避免挡住进度
+  if (updateState?.phase === 'installing') return null;
 
   const phase = updateState?.phase ?? 'idle';
   const percent = Math.max(0, Math.min(100, Math.round(updateState?.percent ?? 0)));

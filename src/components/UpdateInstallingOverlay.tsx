@@ -21,7 +21,7 @@ export function UpdateInstallingOverlay() {
   if (!visible) return null;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/45">
       <div className="w-[360px] rounded-lg border border-shell-line bg-white px-5 py-5 shadow-menu">
         <div className="flex items-center gap-2">
           <Icon name="refresh" size={16} className="animate-spin text-brand-500" />

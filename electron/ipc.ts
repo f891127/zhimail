@@ -24,7 +24,7 @@ import {
   testAccount,
   ensureDefaultFolders,
 } from './services/accounts';
-import { imapService } from './services/imap';
+import { imapService, looksMojibake, repairMojibake } from './services/imap';
 import { smtpService } from './services/smtp';
 import { groupThreads } from './services/thread';
 import { runSearch } from './services/search';
@@ -172,6 +172,9 @@ function folderViews(): FolderView[] {
   return [...commonFolders(), ...folders, ...briefFolders()];
 }
 
+/** 本次运行中已经尝试过重新下载正文的邮件，避免反复请求服务器 */
+const reparseTried = new Set<string>();
+
 function folderOf(id: string) {
   return store.getFolder(id);
 }
@@ -183,13 +186,26 @@ async function loadMessage(id: string): Promise<MessageFull | undefined> {
   let body = store.getMessageBody(meta.accountId, meta.folderId, meta.uid);
   const account = store.getAccount(meta.accountId);
   const folder = folderOf(meta.folderId);
-  if ((!body || (!body.text && !body.html)) && account && folder && !account.demo && folder.remotePath) {
+  const remote = Boolean(account && folder && !account.demo && folder.remotePath);
+  const brokenBody = Boolean(body && (looksMojibake(body.text) || looksMojibake(body.html)));
+  const emptyBody = !body || (!body.text && !body.html);
+  // 旧版本缓存的正文可能是乱码：只要服务器上还有原件，就重新下载并按新逻辑解析一次
+  if (remote && (emptyBody || brokenBody) && !reparseTried.has(id)) {
+    reparseTried.add(id);
     try {
-      const fetched = await imapService.fetchMessageBody(account, folder, meta.uid);
-      if (fetched) body = fetched;
+      const fetched = await imapService.fetchMessageBody(account!, folder!, meta.uid);
+      if (fetched) {
+        body = fetched;
+        store.saveMessageBody(meta.accountId, meta.folderId, meta.uid, fetched);
+      }
     } catch (error) {
       console.warn('[ipc] 按需下载正文失败', (error as Error).message);
     }
+  }
+  // 仍有可逆乱码（如 UTF-8 被当成 latin1）时，在读取环节再纠正一次
+  if (body) {
+    if (looksMojibake(body.text)) body = { ...body, text: repairMojibake(body.text) };
+    if (looksMojibake(body.html)) body = { ...body, html: repairMojibake(body.html) };
   }
   return { ...meta, body: body ?? { attachments: [] } };
 }
