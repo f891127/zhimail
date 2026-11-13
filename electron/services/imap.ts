@@ -22,14 +22,21 @@ import type {
 const CONNECTION_TIMEOUT = 20000;
 const GREETING_TIMEOUT = 15000;
 
-function toAddresses(input: AddressObject | AddressObject[] | undefined): MailAddress[] {
+function toAddresses(input: unknown): MailAddress[] {
   if (!input) return [];
-  const objects = Array.isArray(input) ? input : [input];
+  const list = Array.isArray(input) ? input : [input];
   const result: MailAddress[] = [];
-  for (const obj of objects) {
-    for (const entry of obj.value ?? []) {
-      if (entry.address) result.push({ name: entry.name || undefined, address: entry.address });
+  for (const item of list) {
+    if (!item) continue;
+    const entry = item as { name?: string; address?: string; value?: { name?: string; address?: string }[] };
+    // imapflow 的 envelope 直接给 { name, address }；mailparser 给 { value: [{ name, address }] }
+    if (Array.isArray(entry.value)) {
+      for (const one of entry.value) {
+        if (one?.address) result.push({ name: one.name || undefined, address: one.address });
+      }
+      continue;
     }
+    if (entry.address) result.push({ name: entry.name || undefined, address: entry.address });
   }
   return result;
 }
@@ -132,10 +139,32 @@ export class ImapService {
     await client.connect();
     try {
       const list = await client.list();
+      const existing = store.listFolders(account.id);
+      // 服务器上的收件箱/已发送/草稿等特殊文件夹要与内置文件夹合并，
+      // 否则会出现「收件箱」和「INBOX」两个入口、邮件全堆在 INBOX 的情况
+      const builtinByKind = new Map<string, Folder>();
+      for (const folder of existing) {
+        if (folder.remotePath) continue;
+        if (folder.kind === 'custom' || folder.kind === 'brief' || folder.kind === 'virtual') continue;
+        if (!builtinByKind.has(folder.kind)) builtinByKind.set(folder.kind, folder);
+      }
       const folders: Folder[] = [];
+      const usedBuiltin = new Set<string>();
       for (const item of list) {
         if (item.flags?.has('\\Noselect')) continue;
         const kind = detectFolderKind(item.path, item.specialUse);
+        const builtin = kind === 'custom' ? undefined : builtinByKind.get(kind);
+        if (builtin && !usedBuiltin.has(builtin.id)) {
+          usedBuiltin.add(builtin.id);
+          folders.push({
+            ...builtin,
+            remotePath: item.path,
+            specialUse: item.specialUse,
+            deletable: false,
+            order: KIND_ORDER[kind],
+          });
+          continue;
+        }
         folders.push({
           id: `${account.id}:${item.path}`,
           accountId: account.id,
@@ -147,6 +176,14 @@ export class ImapService {
           order: KIND_ORDER[kind],
           local: false,
         });
+      }
+      // 清理历史遗留的重复文件夹（例如上一版本同步出来的 acc:INBOX），其邮件会在本次同步中重新拉取
+      const keep = new Set(folders.map((folder) => folder.id));
+      for (const folder of existing) {
+        if (keep.has(folder.id)) continue;
+        if (folder.kind === 'brief' || folder.kind === 'virtual') continue;
+        if (!folder.remotePath) continue; // 本地自建目录保留
+        store.removeFolderData(folder.id);
       }
       folders.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'zh'));
       return folders;

@@ -388,6 +388,17 @@ export class Store {
     this.state.messages = this.state.messages.filter((m) => m.folderId !== id);
     this.schedulePersist(true);
   }
+  /** 删除文件夹及其本地邮件正文目录（用于清理重复的服务器文件夹） */
+  removeFolderData(id: string): void {
+    const folder = this.getFolder(id);
+    this.removeFolder(id);
+    if (!folder) return;
+    try {
+      fs.rmSync(this.messageKeyDir(folder.accountId, id), { recursive: true, force: true });
+    } catch {
+      /* 忽略清理失败 */
+    }
+  }
 
   /* --------------------------- 邮件索引 --------------------------- */
 
