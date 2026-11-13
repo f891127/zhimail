@@ -483,6 +483,15 @@ export interface ZhimailApi {
     setFlags: (payload: { ids: string[]; flag: string; value: boolean }) => Promise<Folder[]>;
     move: (payload: { ids: string[]; folderId: string }) => Promise<Folder[]>;
     remove: (ids: string[]) => Promise<Folder[]>;
+    redecode: (payload: {
+      messageId: string;
+      charset?: string;
+    }) => Promise<{
+      ok: boolean;
+      error?: string;
+      body?: { text?: string; html?: string; attachments: AttachmentMeta[] };
+      charset?: string;
+    }>;
     send: (draft: unknown) => Promise<{ ok: boolean; messageId?: string; error?: string }>;
     saveDraft: (draft: unknown) => Promise<{ ok: boolean; id?: string; error?: string }>;
   };

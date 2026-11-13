@@ -128,6 +128,7 @@ const mockApi: ZhimailApi = {
     setFlags: notAvailable,
     move: notAvailable,
     remove: notAvailable,
+    redecode: async () => ({ ok: false, error: '浏览器预览模式不支持重新解码' }),
     send: notAvailable,
     saveDraft: notAvailable,
   },

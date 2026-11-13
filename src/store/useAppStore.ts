@@ -149,6 +149,10 @@ interface State {
   toggleAccount: (accountId: string) => void;
   loadMessages: () => Promise<void>;
   /** 选中邮件；按住 Shift 选连续区间，按住 Ctrl/⌘ 点选多封 */
+  /** 正在重新解码正文 */
+  redecoding: boolean;
+  /** 重新解码正文：不传 charset 时自动挑最优编码 */
+  redecodeMessage: (id: string, charset?: string) => Promise<void>;
   /** 从待办/简报等入口按邮件 id 直接打开（会自动切到所在账户与文件夹） */
   openMessageById: (id: string) => Promise<boolean>;
   selectMessage: (id: string, modifiers?: { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean }) => Promise<void>;
@@ -276,6 +280,7 @@ function toastId(): string {
 
 export const useAppStore = create<State>((set, get) => ({
   ready: false,
+  redecoding: false,
   info: null,
   accounts: [],
   folders: [],
@@ -567,6 +572,34 @@ export const useAppStore = create<State>((set, get) => ({
       }
     } finally {
       set({ loadingMessages: false });
+    }
+  },
+
+  redecodeMessage: async (id, charset) => {
+    set({ redecoding: true });
+    try {
+      const result = await api.messages.redecode({ messageId: id, charset });
+      if (!result.ok || !result.body) {
+        get().pushToast({ type: 'error', title: '重新解码失败', message: result.error });
+        return;
+      }
+      const body = result.body;
+      set((state) => ({
+        selectedMessage:
+          state.selectedMessage && state.selectedMessage.id === id
+            ? { ...state.selectedMessage, body }
+            : state.selectedMessage,
+        messages: state.messages.map((item) =>
+          item.id === id
+            ? { ...item, snippet: (body.text ?? item.snippet ?? '').replace(/\s+/g, ' ').slice(0, 120) }
+            : item,
+        ),
+      }));
+      get().pushToast({ type: 'info', title: `已重新解码（${result.charset ?? '自动'}）` });
+    } catch (error) {
+      get().pushToast({ type: 'error', title: '重新解码失败', message: (error as Error).message });
+    } finally {
+      set({ redecoding: false });
     }
   },
 

@@ -42,6 +42,16 @@ function EmptyReading() {
   );
 }
 
+
+/** 正文是否明显乱码（与主进程判定保持一致，用于提示一键重新解码） */
+function looksGarbled(text: string | undefined | null): boolean {
+  if (!text) return false;
+  if (/[\uff61-\uff9f]/.test(text) || text.includes('\ufffd')) return true;
+  if (/锟斤拷|烫烫烫|ï¿½/.test(text)) return true;
+  const shapes = (text.match(/[\u25A0-\u25FF]/g) ?? []).length;
+  return shapes >= 4 && shapes > text.length * 0.02;
+}
+
 export function ReadingPane() {
   const store = useAppStore();
   const { selectedMessage, selectedMessageId, aiOutputs, aiBusy } = store;
@@ -90,6 +100,7 @@ export function ReadingPane() {
   const translation = aiOutputs.translate?.id === selectedMessageId ? aiOutputs.translate : null;
   const showTranslation = store.translationVisible && Boolean(translation);
   const flagged = selectedMessage?.flags.includes('\\Flagged') ?? false;
+  const garbled = looksGarbled(selectedMessage?.body.text ?? selectedMessage?.body.html ?? '');
 
   if (!selectedMessage) return <EmptyReading />;
 
@@ -401,6 +412,30 @@ export function ReadingPane() {
             </div>
           </div>
         ) : (
+          <>
+            {garbled && (
+              <div className="flex flex-wrap items-center gap-2 border-b border-amber-300 bg-amber-50 px-3 py-1.5 text-[11px] text-amber-900">
+                <Icon name="alert" size={12} className="text-amber-600" />
+                <span>正文可能有编码问题，可尝试重新解码：</span>
+                {[
+                  { label: '自动修复', charset: undefined },
+                  { label: 'UTF-8', charset: 'utf-8' },
+                  { label: 'GBK', charset: 'gb18030' },
+                  { label: 'Big5', charset: 'big5' },
+                ].map((option) => (
+                  <button
+                    key={option.label}
+                    type="button"
+                    disabled={store.redecoding}
+                    onClick={() => void store.redecodeMessage(selectedMessage.id, option.charset)}
+                    className="rounded border border-amber-400/70 bg-white px-1.5 py-0.5 text-[11px] text-amber-900 transition-colors duration-120 hover:bg-amber-100 disabled:opacity-50"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+                {store.redecoding && <span className="text-amber-700">正在重新解码…</span>}
+              </div>
+            )}
           <iframe
             key={`${selectedMessage.id}-${htmlDoc.length}`}
             title="邮件正文"
@@ -408,6 +443,7 @@ export function ReadingPane() {
             sandbox={IFRAME_SANDBOX}
             className="h-full w-full border-0 bg-white"
           />
+          </>
         )}
       </div>
 

@@ -53,6 +53,7 @@ const api = {
       invoke('messages/flags', payload),
     move: (payload: { ids: string[]; folderId: string }) => invoke('messages/move', payload),
     remove: (ids: string[]) => invoke('messages/delete', ids),
+    redecode: (payload: { messageId: string; charset?: string }) => invoke('messages/redecode', payload),
     send: (draft: unknown) => invoke('messages/send', draft),
     saveDraft: (draft: unknown) => invoke('messages/saveDraft', draft),
   },

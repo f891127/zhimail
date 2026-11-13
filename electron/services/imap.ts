@@ -53,6 +53,7 @@ function textScore(text: string): number {
     if (code < 128) score += 1;
     else if (code >= 0x4e00 && code <= 0x9fff) score += 3; // 常用汉字
     else if (code >= 0x3000 && code <= 0x303f) score += 2; // 中文标点
+    else if (code >= 0x25a0 && code <= 0x25ff) score -= 5; // ◆ ■ 等编码错位产物
     else if (code >= 0xff61 && code <= 0xff9f) score -= 6; // 半角片假名：GBK 被当成 Shift_JIS 解码的典型症状
     else if (code >= 0xff00 && code <= 0xffef) score += 1; // 全角符号
     else if (code === 0xfffd || code === 0x25c6 || code === 0x25c7 || code === 0x25a1 || code === 0x25a0) score -= 8;
@@ -73,6 +74,11 @@ export function looksMojibake(text: string | undefined | null): boolean {
   if (!text) return false;
   if (/[\uff61-\uff9f]/.test(text)) return true;
   if (text.includes('\ufffd')) return true;
+  // 经典乱码词（UTF-8 被当 GBK / GBK 被当 UTF-8 的典型结果）
+  if (/锟斤拷|烫烫烫|屯屯屯|ï¿½|Ã¤|â€™/.test(text)) return true;
+  // 编码错位时中文常被映射成几何符号（◆ ■ □ ▲ 等），按密度判断，避免误伤正常的项目符号列表
+  const shapes = (text.match(/[\u25A0-\u25FF]/g) ?? []).length;
+  if (shapes >= 4 && shapes > text.length * 0.02) return true;
   return (text.match(/◇/g) ?? []).length >= 3;
 }
 
@@ -333,6 +339,39 @@ export async function parseMessageSource(source: Buffer | string): Promise<Parse
     if (best.subject) parsed.subject = best.subject;
   }
   return applyRepair(parsed);
+}
+
+/** 指定编码重新解析一封邮件的原文（用于用户手动纠正编码） */
+export async function parseWithCharset(source: Buffer | string, charset: string): Promise<ParsedMail> {
+  const buffer = Buffer.isBuffer(source) ? source : Buffer.from(source, 'binary');
+  const forced = forceCharsetSource(buffer, charset);
+  return simpleParser(forced);
+}
+
+/** 依次尝试候选编码，返回「最像正常中文」的一份 */
+export async function parseBestEffort(
+  source: Buffer | string,
+): Promise<{ parsed: ParsedMail; charset: string; score: number }> {
+  const buffer = Buffer.isBuffer(source) ? source : Buffer.from(source, 'binary');
+  let best: { parsed: ParsedMail; charset: string; score: number } | null = null;
+  for (const charset of ['utf-8', 'gb18030', 'big5'] as const) {
+    try {
+      const parsed = await parseWithCharset(buffer, charset);
+      const text =
+        (parsed.text ?? '') +
+        (typeof parsed.html === 'string' ? parsed.html.replace(/<[^>]+>/g, ' ') : '');
+      const score = plausibility(text);
+      if (!best || score > best.score) best = { parsed, charset, score };
+    } catch {
+      /* 跳过失败的候选 */
+    }
+  }
+  const auto = await parseMessageSource(buffer);
+  const autoText =
+    (auto.text ?? '') + (typeof auto.html === 'string' ? auto.html.replace(/<[^>]+>/g, ' ') : '');
+  const autoScore = plausibility(autoText);
+  if (!best || autoScore >= best.score) return { parsed: auto, charset: 'auto', score: autoScore };
+  return best;
 }
 
 /** 对解析结果的文本部分做一次乱码纠正 */
@@ -963,6 +1002,45 @@ export class ImapService {
       const lock = await client.getMailboxLock(folder.remotePath ?? folder.name);
       try {
         await client.messageDelete(uids, { uid: true });
+      } finally {
+        lock.release();
+      }
+    } finally {
+      try {
+        await client.logout();
+      } catch {
+        /* 忽略 */
+      }
+    }
+  }
+
+  /** 重新解码单封邮件正文：可选指定编码，否则自动挑最像正常中文的一份 */
+  async redecodeMessage(
+    account: Account,
+    folder: Folder,
+    uid: number,
+    charset?: string,
+  ): Promise<{ body: { text?: string; html?: string; attachments: AttachmentMeta[] }; charset: string } | undefined> {
+    const client = this.createClient(account);
+    await client.connect();
+    try {
+      const lock = await client.getMailboxLock(folder.remotePath ?? folder.name);
+      try {
+        const message = (await client.fetchOne(String(uid), { source: true }, { uid: true })) || undefined;
+        if (!message?.source) return undefined;
+        const result = charset
+          ? { parsed: await parseWithCharset(message.source, charset), charset }
+          : await parseBestEffort(message.source);
+        const metaId = `${account.id}/${folder.id}/${uid}`;
+        const existing = store.getMessageBody(account.id, folder.id, uid);
+        const body = {
+          text: result.parsed.text ?? undefined,
+          html: typeof result.parsed.html === 'string' ? result.parsed.html : undefined,
+          attachments: existing?.attachments ?? [],
+        };
+        store.saveMessageBody(account.id, folder.id, uid, body);
+        store.patchMessage(metaId, { snippet: makeSnippet(body.text, body.html) });
+        return { body, charset: result.charset };
       } finally {
         lock.release();
       }

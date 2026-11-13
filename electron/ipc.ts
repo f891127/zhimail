@@ -474,6 +474,24 @@ export function registerIpcHandlers(): void {
     return folderViews();
   });
 
+  ipcMain.handle(
+    'messages/redecode',
+    async (_event, payload: { messageId: string; charset?: string }) => {
+      const meta = store.getMessageMeta(payload.messageId);
+      if (!meta) return { ok: false, error: '邮件已不存在' };
+      const account = store.getAccount(meta.accountId);
+      const folder = folderOf(meta.folderId);
+      if (!account || !folder) return { ok: false, error: '找不到邮件所在的账户或文件夹' };
+      if (account.demo) return { ok: false, error: '演示邮件无需重新解码' };
+      try {
+        const result = await imapService.redecodeMessage(account, folder, meta.uid, payload.charset);
+        if (!result) return { ok: false, error: '服务器上没有取到邮件原文' };
+        return { ok: true, body: result.body, charset: result.charset };
+      } catch (error) {
+        return { ok: false, error: `重新解码失败：${(error as Error).message}` };
+      }
+    },
+  );
   ipcMain.handle('messages/send', async (_event, draft: DraftInput) => {
     const account = store.getAccount(draft.accountId);
     if (!account) return { ok: false, error: '账户不存在' };
