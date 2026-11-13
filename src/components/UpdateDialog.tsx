@@ -26,10 +26,12 @@ export function UpdateDialog() {
   const suppressed = settingsOpen && settingsTab === 'update';
   const [notesOpen, setNotesOpen] = useState(false);
 
-  // 打开时若还没有状态，主动查一次
+  // 打开时若还没查过，主动查一次（检查在主进程里是单飞的，重复触发也只会执行一次）
   useEffect(() => {
-    if (updateDialogOpen && !updateState) void checkUpdate();
-  }, [updateDialogOpen, updateState, checkUpdate]);
+    if (updateDialogOpen && !suppressed && (!updateState || updateState.phase === 'idle')) {
+      void checkUpdate();
+    }
+  }, [updateDialogOpen, suppressed, updateState, checkUpdate]);
 
   // 被设置页接管时顺手关掉弹窗状态，避免用户关掉设置后弹窗又冒出来
   useEffect(() => {

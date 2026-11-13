@@ -70,6 +70,9 @@ let lastProgressAt = 0;
 let pendingFeed = false;
 /** 差分下载回退成整包下载（进度会回落），用于给界面解释 */
 let fullFallback = false;
+/** 同一时间只允许一次检查、一次下载：重复调用直接复用同一个 Promise */
+let checkPromise: Promise<UpdateState> | null = null;
+let downloadPromise: Promise<UpdateState> | null = null;
 
 function setState(patch: Partial<UpdateState>): void {
   state = { ...state, ...patch, currentVersion: app.getVersion() };
@@ -137,7 +140,8 @@ export function initUpdater(): void {
   initialized = true;
 
   autoUpdater.autoDownload = store.getSettings().update?.autoDownload ?? false;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // 只用显式 quitAndInstall 安装：两者同时开着，退出时会被再触发一次安装流程
+  autoUpdater.autoInstallOnAppQuit = false;
   // 差分下载保留开启：更新包只有几十 MB，差异部分通常只有几 MB。
   // 但它在「本地没有旧安装包可做基准」或块校验不通过时会静默回退成整包下载，
   // 表现就是进度忽然从高处掉回 0。这里检测到回退就给出说明，而不是让它看起来像重新下载。
@@ -222,6 +226,15 @@ function classifyUpdateError(raw: string): 'network' | 'not-found' | 'other' {
 }
 
 export async function checkForUpdates(): Promise<UpdateState> {
+  // 菜单、更新弹窗、设置页可能同时触发检查，这里合并成一次，避免重复下载
+  if (checkPromise) return checkPromise;
+  checkPromise = runCheckForUpdates().finally(() => {
+    checkPromise = null;
+  });
+  return checkPromise;
+}
+
+async function runCheckForUpdates(): Promise<UpdateState> {
   // 下载或安装进行中不要再触发检查：electron-updater 会直接拒绝这次调用，
   // 界面上就表现为「点了在线更新没反应」。直接把当前进度回给界面。
   if (state.phase === 'downloading' || state.phase === 'downloaded' || state.phase === 'installing') {
@@ -258,6 +271,14 @@ export async function checkForUpdates(): Promise<UpdateState> {
 }
 
 export async function downloadUpdate(): Promise<UpdateState> {
+  if (downloadPromise) return downloadPromise;
+  downloadPromise = runDownloadUpdate().finally(() => {
+    downloadPromise = null;
+  });
+  return downloadPromise;
+}
+
+async function runDownloadUpdate(): Promise<UpdateState> {
   if (!app.isPackaged) {
     setState({ phase: 'unsupported', error: '开发模式无法下载更新' });
     return state;
@@ -323,6 +344,8 @@ export async function openDownloadedInstaller(): Promise<{ ok: boolean; path?: s
 }
 
 export function installUpdate(): { ok: boolean; error?: string } {
+  // 连点两次「立即重启并安装」时只启动一次安装程序
+  if (installing) return { ok: true };
   if (!app.isPackaged) {
     setState({ phase: 'unsupported', error: '开发模式无法安装更新' });
     return { ok: false, error: '开发模式无法安装更新' };
