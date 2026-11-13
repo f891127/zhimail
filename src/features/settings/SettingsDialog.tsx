@@ -1685,8 +1685,9 @@ export function SettingsDialog() {
                   )}
 
                   {updateState?.phase === 'downloading' && updateState?.fullDownloadFallback && (
-                    <p className="mt-1.5 text-[11px] leading-4 text-amber-700">
-                      差分校验未通过（本地没有可比的旧安装包），已自动改为整包下载，进度会从头计算。
+                    <p className="mt-1.5 text-[11px] leading-4 text-shell-sub">
+                      本次为整包下载（{updateState?.downloadSize ? fileSize(updateState.downloadSize) : '约 84 MB'}）。本地没有可用来比对的上一版安装包，
+                      所以只能整包传，这是首次从旧版本升级时的正常现象，进度会从 0 重新计算；装好这一版后，后续更新会优先只传差异部分。
                     </p>
                   )}
 

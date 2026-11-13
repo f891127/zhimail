@@ -131,8 +131,9 @@ export function UpdateDialog() {
               </div>
               <p className="text-[11px] text-shell-faint">下载完成后会提示立即重启安装，不影响当前使用。</p>
               {updateState?.fullDownloadFallback && (
-                <p className="rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-700">
-                  差分校验未通过（本地没有可比的旧安装包），已自动改为整包下载，进度会从头计算。
+                <p className="rounded bg-shell-chrome px-2 py-1 text-[11px] leading-5 text-shell-sub">
+                  本次为整包下载（{updateState?.downloadSize ? `${(updateState.downloadSize / 1024 / 1024).toFixed(1)} MB` : '约 84 MB'}）：本地没有可用来比对的上一版安装包，
+                  属于从旧版本升级时的正常情况，进度会从 0 重新计算；装好这一版后，后续更新会优先只传差异部分。
                 </p>
               )}
             </div>

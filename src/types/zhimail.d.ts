@@ -293,6 +293,7 @@ export interface UpdateState {
   error?: string;
   /** 差分下载失败后回退成整包下载 */
   fullDownloadFallback?: boolean;
+  downloadSize?: number;
   canCheck: boolean;
 }
 

@@ -40,6 +40,8 @@ export interface UpdateState {
   error?: string;
   /** 差分下载校验失败后回退成整包下载（进度会回落），界面上解释一句 */
   fullDownloadFallback?: boolean;
+  /** 本次更新安装包体积（字节），用于界面显示「整包约 xx MB」 */
+  downloadSize?: number;
   canCheck: boolean;
 }
 
@@ -158,6 +160,7 @@ export function initUpdater(): void {
       version: info.version,
       releaseNotes: normalizeNotes(info.releaseNotes),
       releaseDate: info.releaseDate,
+      downloadSize: info.files?.[0]?.size,
       error: undefined,
     }),
   );
@@ -166,7 +169,8 @@ export function initUpdater(): void {
     const percent = Math.round(progress.percent * 10) / 10;
     const now = Date.now();
     // 进度明显回落 = 差分失败后改成整包下载，标记出来让界面解释一句
-    if (typeof state.percent === 'number' && state.percent - percent > 15) {
+    // 只有已经下载了一段（>20%）再回落才算，避免刚起步的抖动被误判
+    if (typeof state.percent === 'number' && state.percent >= 20 && state.percent - percent > 15) {
       fullFallback = true;
       setState({ fullDownloadFallback: true });
     }
