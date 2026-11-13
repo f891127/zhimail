@@ -451,6 +451,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('messages/delete', async (_event, ids: string[]) => {
     const metas = ids.map((id) => store.getMessageMeta(id)).filter(Boolean) as MessageMeta[];
     store.deleteMessages(ids);
+    // 设置里可选择「本地删除时服务器保留」，此时只删本地、不动服务器
+    if (!store.getSettings().mail.deleteOnServer) return;
     // 按「账户 + 文件夹」归组，一组只建一次连接、一次批量删除，避免逐封登录服务器
     const groups = new Map<string, { account: Account; folder: Folder; uids: number[] }>();
     for (const meta of metas) {

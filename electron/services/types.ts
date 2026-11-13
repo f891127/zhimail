@@ -406,6 +406,10 @@ export interface MailBehaviorSettings {
   attachmentPreview: boolean;
   /** 列表模式：普通 / 会话 / 相关邮件 */
   listMode: 'normal' | 'conversation' | 'related';
+  /** 本地删除邮件时，是否同时删除服务器上的副本（false = 服务器保留） */
+  deleteOnServer: boolean;
+  /** 同步时是否跟随服务器删除（true = 服务器已删除的邮件本地也删除） */
+  syncServerDeletes: boolean;
 }
 
 export interface AppSettings {

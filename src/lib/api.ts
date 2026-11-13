@@ -53,6 +53,8 @@ const emptySettings: AppSettings = {
     notify: true,
     notifySound: false,
     attachmentPreview: true,
+    deleteOnServer: true,
+    syncServerDeletes: false,
     listMode: 'conversation' as const,
   },
   locale: 'system' as const,
@@ -91,6 +93,8 @@ function mockSystemState() {
       notifySound: false,
       attachmentPreview: true,
       listMode: 'conversation' as const,
+      deleteOnServer: true,
+      syncServerDeletes: false,
     },
   };
 }

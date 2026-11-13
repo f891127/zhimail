@@ -98,6 +98,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     notifySound: false,
     attachmentPreview: true,
     listMode: 'conversation',
+    deleteOnServer: true,
+    syncServerDeletes: false,
   },
   locale: 'system',
 };

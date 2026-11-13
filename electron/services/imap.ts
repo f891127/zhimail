@@ -692,6 +692,35 @@ export class ImapService {
     return { fetched, folders: store.listFolders(account.id).length, errors };
   }
 
+  /**
+   * 服务器上已删除的邮件，本地是否跟着删除（设置项 mail.syncServerDeletes）。
+   * 只在「同步时间窗口」内比对，避免把窗口外的历史邮件误删；
+   * 若窗口内本地邮件几乎全部消失，多半是 UIDVALIDITY 变化或服务器异常，跳过本轮清理。
+   */
+  private pruneDeletedOnServer(
+    account: Account,
+    folder: Folder,
+    serverUids: number[],
+    since: Date,
+  ): void {
+    if (!store.getSettings().mail.syncServerDeletes) return;
+    const sinceTime = since.getTime();
+    const local = store
+      .allMessages()
+      .filter((m) => m.folderId === folder.id && m.date >= sinceTime);
+    if (!local.length) return;
+    const serverSet = new Set(serverUids);
+    const kept = local.filter((m) => serverSet.has(m.uid));
+    const gone = local.filter((m) => !serverSet.has(m.uid));
+    if (!gone.length) return;
+    if (kept.length === 0 && local.length > 3) {
+      console.warn('[imap] 窗口内本地邮件全部不在服务器上，疑似 UIDVALIDITY 变化，跳过清理');
+      return;
+    }
+    store.deleteMessages(gone.map((m) => m.id));
+    console.log(`[imap] 已跟随服务器删除 ${gone.length} 封（${account.name} / ${folder.name}）`);
+  }
+
   private async syncFolder(
     client: ImapFlow,
     account: Account,
@@ -709,6 +738,9 @@ export class ImapService {
       const fullCount = options.fullCount ?? 60;
       const fullUids = new Set(limited.slice(-fullCount));
       const envelopeOnly = limited.filter((uid) => !fullUids.has(uid));
+
+      // 跟随服务器删除：本地有、服务器已没有的邮件（同一时间窗口内）一并清理
+      this.pruneDeletedOnServer(account, folder, uids, since);
 
       const existing = new Set(
         store

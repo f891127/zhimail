@@ -187,6 +187,10 @@ export interface MailBehaviorSettings {
   notifySound: boolean;
   attachmentPreview: boolean;
   listMode: 'normal' | 'conversation' | 'related';
+  /** 本地删除时是否同步删除服务器副本 */
+  deleteOnServer: boolean;
+  /** 同步时是否跟随服务器删除 */
+  syncServerDeletes: boolean;
 }
 
 export interface AppSystemState extends AppBehaviorSettings {

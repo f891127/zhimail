@@ -141,6 +141,18 @@ export function SystemSettingsPage() {
             onChange={(value) => patchMail({ notifySound: value })}
           />
           <Checkbox
+            checked={mail?.deleteOnServer ?? true}
+            label="删除邮件时同时删除服务器上的副本"
+            hint="(关闭后仅在本机删除，服务器上仍保留，换设备还能收到)"
+            onChange={(value) => patchMail({ deleteOnServer: value })}
+          />
+          <Checkbox
+            checked={mail?.syncServerDeletes ?? false}
+            label="同步时跟随服务器删除"
+            hint="(服务器上已删除的邮件，本地同步时一并删除；只在同步时间范围内比对)"
+            onChange={(value) => patchMail({ syncServerDeletes: value })}
+          />
+          <Checkbox
             checked={mail?.attachmentPreview ?? true}
             label="附件预览"
             hint="(图片 / PDF / 文本可直接在客户端内预览)"
