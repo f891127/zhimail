@@ -19,6 +19,19 @@ import {
 type TabId = 'account' | 'ai' | 'ui' | 'brief' | 'data' | 'update' | 'about' | 'app';
 
 /** 常用 GitHub 加速镜像：均为第三方服务，仅作为快捷填入 */
+
+/** 更新源展示文案：能识别常见镜像，否则显示主机名 */
+function describeSource(url: string): string {
+  if (!url) return '自定义地址（未填写）';
+  const mirror = UPDATE_MIRRORS.find((item) => item.url === url);
+  if (mirror) return `镜像 ${mirror.label}`;
+  try {
+    return `自定义地址 ${new URL(url).host}`;
+  } catch {
+    return '自定义地址';
+  }
+}
+
 const UPDATE_MIRRORS = [
   {
     label: 'ghproxy.net',
@@ -192,21 +205,36 @@ export function SettingsDialog() {
   const [scheduleBusy, setScheduleBusy] = useState<string | null>(null);
 
   // 更新源本地状态：改动后点击「保存更新源」才写入设置
-  const [updateSource, setUpdateSource] = useState<'github' | 'custom'>(settings?.update?.source ?? 'github');
   const [customUrl, setCustomUrl] = useState(settings?.update?.customUrl ?? '');
+  // 直接读取已保存的设置，保证选中状态持续显示
+  const savedSource = settings?.update?.source ?? 'github';
+  const savedUrl = (settings?.update?.customUrl ?? '').trim();
 
   useEffect(() => {
-    setUpdateSource(settings?.update?.source ?? 'github');
     setCustomUrl(settings?.update?.customUrl ?? '');
-  }, [settings?.update?.source, settings?.update?.customUrl]);
+  }, [settings?.update?.customUrl]);
 
-  const saveUpdateSource = async () => {
-    await store.updateSettings({ update: { ...settings?.update, source: updateSource, customUrl: customUrl.trim() } });
+  /** 立即保存更新源（选中即生效，不用再点保存按钮） */
+  const saveUpdateSource = async (
+    next: { source: 'github' | 'custom'; customUrl?: string },
+    hint?: string,
+  ) => {
+    const url = (next.customUrl ?? customUrl).trim();
+    await store.updateSettings({
+      update: { ...(settings?.update ?? {}), source: next.source, customUrl: url },
+    });
+    if (next.customUrl !== undefined) setCustomUrl(url);
     store.pushToast({
       type: 'success',
       title: '更新源已保存',
-      message: updateSource === 'custom' ? '下次检查更新将使用自定义地址' : '下次检查更新将使用 GitHub 官方源',
+      message: hint ?? (next.source === 'custom' ? '已切换为镜像 / 自定义地址' : '已切换为 GitHub 官方源'),
     });
+  };
+
+  /** 选择镜像：填入地址并立即保存 */
+  const chooseMirror = async (mirror: { label: string; url: string }) => {
+    setCustomUrl(mirror.url);
+    await saveUpdateSource({ source: 'custom', customUrl: mirror.url }, `已切换到镜像 ${mirror.label}`);
   };
 
   // 数据存储位置
@@ -1493,56 +1521,62 @@ export function SettingsDialog() {
                   <div className="flex flex-wrap gap-1.5">
                     <button
                       type="button"
-                      className={updateSource === 'github' ? 'primary-btn' : 'ghost-btn'}
-                      onClick={() => setUpdateSource('github')}
+                      className={savedSource === 'github' ? 'primary-btn' : 'ghost-btn'}
+                      onClick={() => void saveUpdateSource({ source: 'github' })}
                     >
+                      {savedSource === 'github' && <Icon name="check" size={12} />}
                       GitHub 官方
                     </button>
                     <button
                       type="button"
-                      className={updateSource === 'custom' ? 'primary-btn' : 'ghost-btn'}
-                      onClick={() => setUpdateSource('custom')}
+                      className={savedSource === 'custom' ? 'primary-btn' : 'ghost-btn'}
+                      onClick={() => void saveUpdateSource({ source: 'custom' })}
                     >
+                      {savedSource === 'custom' && <Icon name="check" size={12} />}
                       镜像 / 自定义地址
                     </button>
                   </div>
-
-                  {updateSource === 'custom' && (
+                  {savedSource === 'custom' && (
                     <div className="mt-2">
                       <input
                         value={customUrl}
                         onChange={(event) => setCustomUrl(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') void saveUpdateSource({ source: 'custom' });
+                        }}
                         placeholder="https://ghproxy.net/https://github.com/f891127/zhimail/releases/latest/download"
                         className="w-full rounded border border-shell-line bg-white px-2 py-1 text-[11px] text-shell-text outline-none focus:border-brand-400"
                       />
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {UPDATE_MIRRORS.map((mirror) => (
-                          <button
-                            key={mirror.label}
-                            type="button"
-                            className="ghost-btn"
-                            onClick={() => setCustomUrl(mirror.url)}
-                          >
-                            {mirror.label}
-                          </button>
-                        ))}
+                        {UPDATE_MIRRORS.map((mirror) => {
+                          const active = savedSource === 'custom' && savedUrl === mirror.url;
+                          return (
+                            <button
+                              key={mirror.label}
+                              type="button"
+                              className={active ? 'primary-btn' : 'ghost-btn'}
+                              onClick={() => void chooseMirror(mirror)}
+                            >
+                              {active && <Icon name="check" size={12} />}
+                              {mirror.label}
+                            </button>
+                          );
+                        })}
                       </div>
                       <p className="mt-1.5 text-[11px] leading-5 text-shell-faint">
-                        该地址需要能直接访问到 latest.yml 与安装包；镜像站点为第三方服务，可用性可能变化，可先点「检查更新」验证。
+                        点一下镜像即生效（会自动保存）；也可以手动填写地址后按回车或点「保存更新源」。该地址需要能直接访问到 latest.yml 与安装包，镜像站点为第三方服务，可用性可能变化，可先点「检查更新」验证。
                       </p>
                     </div>
                   )}
-
-                  <div className="mt-2 flex items-center gap-1.5">
-                    <button type="button" className="ghost-btn" onClick={() => void saveUpdateSource()}>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <button type="button" className="ghost-btn" onClick={() => void saveUpdateSource({ source: savedSource })}>
                       保存更新源
                     </button>
                     <span className="text-[11px] text-shell-faint">
-                      当前：{settings?.update?.source === 'custom' ? '自定义地址' : 'GitHub 官方'}
+                      当前：{savedSource === 'custom' ? describeSource(savedUrl) : 'GitHub 官方'}
                     </span>
                   </div>
                 </div>
-
                 <p className="text-[11px] leading-5 text-shell-faint">
                   更新包发布在 GitHub Releases（f891127/zhimail）。客户端通过 latest.yml 比对版本，仅下载差异部分。
                   若提示连接超时，通常是本机网络无法直连 GitHub，可切换到镜像地址后重试。
