@@ -241,7 +241,7 @@ export function MessageList() {
         )
       : rawMessages;
 
-  const folder = store.folders.find((item) => item.id === selectedFolderId);
+  const folder = (store.folders ?? []).find((item) => item.id === selectedFolderId);
   const [menu, setMenu] = useState<{ x: number; y: number; message: MessageMeta } | null>(null);
 
   const openContextMenu = (event: React.MouseEvent, message: MessageMeta) => {

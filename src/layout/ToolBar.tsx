@@ -41,7 +41,7 @@ export function ToolBar() {
   }, [searchActive, searchKeyword]);
 
   const flagged = selectedMessage?.flags.includes('\\Flagged') ?? false;
-  const realAccount = accounts.find((account) => !account.demo);
+  const realAccount = (accounts ?? []).find((account) => !account.demo);
 
   // 工具栏按钮由设置决定：勾选哪些显示、顺序即展示顺序（空配置时用出厂默认）
   const configured = store.settings?.ui?.toolbarActions;

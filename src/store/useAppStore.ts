@@ -797,7 +797,7 @@ export const useAppStore = create<State>((set, get) => ({
     get().pushToast({ type: 'info', title: `已删除 ${ids.length} 封邮件` });
     try {
       const folders = await api.messages.remove(ids);
-      set({ folders });
+      if (Array.isArray(folders)) set({ folders });
     } catch (error) {
       get().pushToast({ type: 'error', title: '删除同步失败', message: (error as Error).message });
       await get().loadMessages();
@@ -806,9 +806,9 @@ export const useAppStore = create<State>((set, get) => ({
 
   moveMessages: async (ids, folderId) => {
     const folders = await api.messages.move({ ids, folderId });
-    const target = folders.find((folder) => folder.id === folderId);
+    const target = (folders ?? []).find((folder) => folder.id === folderId);
     set((state) => ({
-      folders,
+      folders: Array.isArray(folders) ? folders : state.folders,
       messages: state.messages.filter((item) => !ids.includes(item.id)),
       selectedMessageId: ids.includes(state.selectedMessageId ?? '') ? null : state.selectedMessageId,
       selectedMessage: ids.includes(state.selectedMessageId ?? '') ? null : state.selectedMessage,

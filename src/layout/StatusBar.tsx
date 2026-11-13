@@ -20,7 +20,7 @@ export function StatusBar() {
     refreshBalance,
   } = useAppStore();
 
-  const folder = folders.find((item) => item.id === selectedFolderId);
+  const folder = (folders ?? []).find((item) => item.id === selectedFolderId);
   const syncLabel = (() => {
     if (!syncProgress) return '就绪';
     switch (syncProgress.phase) {

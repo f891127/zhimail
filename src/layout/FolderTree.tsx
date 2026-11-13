@@ -188,10 +188,11 @@ export function FolderTree() {
     { label: '删除文件夹', disabled: folder.kind !== 'custom', onClick: () => void removeFolder(folder) },
   ];
 
-  const commonRoot = folders.find((folder) => folder.id === 'common');
+  const safeFolders = folders ?? [];
+  const commonRoot = safeFolders.find((folder) => folder.id === 'common');
   const commonChildren = folders.filter((folder) => folder.parentId === 'common');
   const labelChildren = folders.filter((folder) => folder.parentId === 'common/labels');
-  const briefRoot = folders.find((folder) => folder.id === 'briefs');
+  const briefRoot = safeFolders.find((folder) => folder.id === 'briefs');
 
   return (
     <div className="flex h-full w-full flex-col bg-shell-chrome">
