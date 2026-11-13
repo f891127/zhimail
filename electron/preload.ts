@@ -17,6 +17,9 @@ const EVENT_CHANNELS = [
 const api = {
   app: {
     info: () => invoke('app/info'),
+    chooseDataDir: () => invoke('app/chooseDataDir'),
+    resetDataDir: () => invoke('app/resetDataDir'),
+    relaunch: () => invoke('app/relaunch'),
   },
   accounts: {
     list: () => invoke('accounts/list'),
@@ -67,6 +70,7 @@ const api = {
     get: (id: string) => invoke('brief/get', id),
     generate: (params: unknown) => invoke('brief/generate', params),
     remove: (id: string) => invoke('brief/remove', id),
+    runSchedule: (scheduleId: string) => invoke('brief/runSchedule', scheduleId),
     export: (payload: { id: string; format: 'md' | 'html' | 'docx' }) =>
       invoke('brief/export', payload),
   },
@@ -84,6 +88,15 @@ const api = {
   },
   demo: {
     reset: () => invoke('demo/reset'),
+  },
+  backup: {
+    overview: () => invoke('backup/overview'),
+    export: (options?: unknown) => invoke('backup/export', options),
+    inspect: () => invoke('backup/inspect'),
+    import: (filePath: string) => invoke('backup/import', filePath),
+    autoRun: () => invoke('backup/autoRun'),
+    remove: (filePath: string) => invoke('backup/remove', filePath),
+    openDir: () => invoke('backup/openDir'),
   },
   system: {
     openPath: (target: string) => invoke('shell/openPath', target),

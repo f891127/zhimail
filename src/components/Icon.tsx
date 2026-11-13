@@ -42,6 +42,8 @@ export type IconName =
   | 'translate'
   | 'shield'
   | 'panel'
+  | 'maximize'
+  | 'minimize'
   | 'sort'
   | 'filter'
   | 'undo'
@@ -264,6 +266,19 @@ const PATHS: Record<IconName, JSX.Element> = {
     <>
       <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
       <path d="M14.5 4.5v15" />
+    </>
+  ),
+  maximize: (
+    <>
+      <path d="M4 9V4h5" />
+      <path d="M20 15v5h-5" />
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+    </>
+  ),
+  minimize: (
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="M9 9h6v6H9z" />
     </>
   ),
   sort: (

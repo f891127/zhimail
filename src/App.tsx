@@ -57,7 +57,7 @@ function Splitter({ onDrag }: { onDrag: (deltaX: number) => void }) {
 
 export default function App() {
   const store = useAppStore();
-  const { ready, view, settings, aiPanelOpen, init } = store;
+  const { ready, view, settings, aiPanelOpen, aiPanelMaximized, init } = store;
   const [folderWidth, setFolderWidth] = useState(212);
   const [listWidth, setListWidth] = useState(424);
 
@@ -180,34 +180,39 @@ export default function App() {
       <ToolBar />
 
       <div className="flex min-h-0 flex-1">
-        <div className="shrink-0 overflow-hidden" style={{ width: folderWidth }}>
-          <FolderTree />
-        </div>
-        <Splitter
-          onDrag={(delta) => setFolderWidth((width) => Math.min(320, Math.max(170, width + delta)))}
-        />
+        {/* AI 助手最大化时，其余区域暂时隐藏，只保留 AI 面板 */}
+        {!aiPanelMaximized && (
+          <>
+            <div className="shrink-0 overflow-hidden" style={{ width: folderWidth }}>
+              <FolderTree />
+            </div>
+            <Splitter
+              onDrag={(delta) => setFolderWidth((width) => Math.min(320, Math.max(170, width + delta)))}
+            />
 
-        <div className="relative flex min-w-0 flex-1">
-          {view === 'mail' && (
-            <>
-              <div className="shrink-0 overflow-hidden" style={{ width: readingPane ? listWidth : undefined }}>
-                <MessageList />
-              </div>
-              {readingPane && (
+            <div className="relative flex min-w-0 flex-1">
+              {view === 'mail' && (
                 <>
-                  <Splitter
-                    onDrag={(delta) => setListWidth((width) => Math.min(560, Math.max(260, width + delta)))}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <ReadingPane />
+                  <div className="shrink-0 overflow-hidden" style={{ width: readingPane ? listWidth : undefined }}>
+                    <MessageList />
                   </div>
+                  {readingPane && (
+                    <>
+                      <Splitter
+                        onDrag={(delta) => setListWidth((width) => Math.min(560, Math.max(260, width + delta)))}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <ReadingPane />
+                      </div>
+                    </>
+                  )}
                 </>
               )}
-            </>
-          )}
-          {view === 'briefs' && <BriefCenter />}
-          {view === 'todos' && <TodoPanel />}
-        </div>
+              {view === 'briefs' && <BriefCenter />}
+              {view === 'todos' && <TodoPanel />}
+            </div>
+          </>
+        )}
 
         <AIAssistantPanel />
       </div>

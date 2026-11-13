@@ -138,14 +138,32 @@ app.whenReady().then(async () => {
       `engine=${builtin.engine} text=${builtin.text.slice(0, 20)}`,
     );
 
-    // 13. 调度周期计算
+    // 13. 调度周期计算（多组排程：日/周/月/年/自定义）
     const { computePeriod } = require('../dist-electron/services/scheduler');
-    const daily = computePeriod('daily', new Date('2026-11-12T09:00:00'), { time: '08:30', weekday: 1, dayOfMonth: 1 });
-    const weekly = computePeriod('weekly', new Date('2026-11-12T09:00:00'), { time: '08:30', weekday: 1, dayOfMonth: 1 });
-    const monthly = computePeriod('monthly', new Date('2026-11-12T09:00:00'), { time: '08:30', weekday: 1, dayOfMonth: 1 });
-    check('自动简报周期计算（日）', daily.start < daily.end && daily.end <= Date.now(), `${new Date(daily.start).toISOString().slice(0, 10)}~${new Date(daily.end).toISOString().slice(0, 10)}`);
-    check('自动简报周期计算（周）', weekly.end - weekly.start > 6 * 86400000 - 1000, `${Math.round((weekly.end - weekly.start) / 86400000)}天`);
-    check('自动简报周期计算（月）', monthly.end - monthly.start >= 27 * 86400000, `${Math.round((monthly.end - monthly.start) / 86400000)}天`);
+    const base = {
+      id: 'test',
+      name: 'test',
+      enabled: true,
+      time: '08:30',
+      weekday: 1,
+      dayOfMonth: 1,
+      month: 1,
+      days: 7,
+      scope: 'all',
+      anchorAt: 0,
+      lastRun: {},
+    };
+    const periodNow = new Date('2026-11-12T09:00:00');
+    const daily = computePeriod({ ...base, frequency: 'daily' }, periodNow);
+    const weekly = computePeriod({ ...base, frequency: 'weekly' }, periodNow);
+    const monthly = computePeriod({ ...base, frequency: 'monthly' }, periodNow);
+    const yearly = computePeriod({ ...base, frequency: 'yearly', month: 1, dayOfMonth: 1 }, periodNow);
+    const custom14 = computePeriod({ ...base, frequency: 'custom', days: 14 }, periodNow);
+    check('简报周期（每日）', daily.start < daily.end && daily.end <= periodNow.getTime(), `${new Date(daily.start).toISOString().slice(0, 10)}~${new Date(daily.end).toISOString().slice(0, 10)}`);
+    check('简报周期（每周）', weekly.end - weekly.start > 6 * 86400000 - 1000, `${Math.round((weekly.end - weekly.start) / 86400000)}天`);
+    check('简报周期（每月）', monthly.end - monthly.start >= 27 * 86400000, `${Math.round((monthly.end - monthly.start) / 86400000)}天`);
+    check('简报周期（每年）', Math.round((yearly.end - yearly.start + 1) / 86400000) === 365 || Math.round((yearly.end - yearly.start + 1) / 86400000) === 366, `${Math.round((yearly.end - yearly.start + 1) / 86400000)}天`);
+    check('简报周期（自定义每 14 天）', Math.round((custom14.end - custom14.start + 1) / 86400000) === 14, `${Math.round((custom14.end - custom14.start + 1) / 86400000)}天`);
 
     // 14. 设置持久化
     store.flush();

@@ -2,19 +2,147 @@
 
 import { useEffect, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { Icon } from '@/components/Icon';
+import { Icon, type IconName } from '@/components/Icon';
 import { api } from '@/lib/api';
-import type { AccountInput } from '@/types/zhimail';
+import type { AccountInput, AppSettings, BackupOverview, BriefKind, BriefSchedule } from '@/types/zhimail';
+import { fileSize } from '@/lib/format';
+import { DEFAULT_READER_ACTIONS, READER_ACTIONS, READER_ACTION_GROUPS } from '@/lib/readerActions';
 
-type TabId = 'account' | 'ai' | 'brief' | 'update' | 'about';
+type TabId = 'account' | 'ai' | 'ui' | 'brief' | 'data' | 'update' | 'about';
 
-const TABS: { id: TabId; label: string; icon: 'user' | 'sparkles' | 'calendar' | 'refresh' | 'info' }[] = [
+/** 常用 GitHub 加速镜像：均为第三方服务，仅作为快捷填入 */
+const UPDATE_MIRRORS = [
+  {
+    label: 'ghproxy.net',
+    url: 'https://ghproxy.net/https://github.com/f891127/zhimail/releases/latest/download',
+  },
+  {
+    label: 'gh-proxy.com',
+    url: 'https://gh-proxy.com/https://github.com/f891127/zhimail/releases/latest/download',
+  },
+  {
+    label: 'ghfast.top',
+    url: 'https://ghfast.top/https://github.com/f891127/zhimail/releases/latest/download',
+  },
+  {
+    label: 'GitHub 直连（不走 API）',
+    url: 'https://github.com/f891127/zhimail/releases/latest/download',
+  },
+];
+
+const TABS: { id: TabId; label: string; icon: IconName }[] = [
   { id: 'account', label: '邮箱账户', icon: 'user' },
   { id: 'ai', label: 'AI 助手', icon: 'sparkles' },
+  { id: 'ui', label: '界面', icon: 'panel' },
   { id: 'brief', label: '自动简报', icon: 'calendar' },
+  { id: 'data', label: '数据与备份', icon: 'archive' },
   { id: 'update', label: '在线更新', icon: 'refresh' },
   { id: 'about', label: '关于', icon: 'info' },
 ];
+
+/** 简报周期选项 */
+const BRIEF_FREQUENCY_OPTIONS: { value: BriefKind; label: string }[] = [
+  { value: 'daily', label: '每日' },
+  { value: 'weekly', label: '每周' },
+  { value: 'monthly', label: '每月' },
+  { value: 'yearly', label: '每年' },
+  { value: 'custom', label: '自定义（每 N 天）' },
+];
+
+const WEEKDAY_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+
+function describeSchedule(schedule: BriefSchedule): string {
+  switch (schedule.frequency) {
+    case 'daily':
+      return `每天 ${schedule.time}`;
+    case 'weekly':
+      return `每${WEEKDAY_LABELS[schedule.weekday - 1] ?? '周一'} ${schedule.time}`;
+    case 'monthly':
+      return `每月 ${schedule.dayOfMonth} 日 ${schedule.time}`;
+    case 'yearly':
+      return `每年 ${schedule.month} 月 ${schedule.dayOfMonth} 日 ${schedule.time}`;
+    default:
+      return `每 ${schedule.days} 天 ${schedule.time}`;
+  }
+}
+
+/** 「恢复默认」用的四组模板 */
+const DEFAULT_SCHEDULE_TEMPLATE: BriefSchedule[] = [
+  {
+    id: 'schedule-daily',
+    name: '日报',
+    enabled: true,
+    frequency: 'daily',
+    time: '08:30',
+    weekday: 1,
+    dayOfMonth: 1,
+    month: 1,
+    days: 1,
+    scope: 'all',
+    anchorAt: 0,
+    lastRun: {},
+  },
+  {
+    id: 'schedule-weekly',
+    name: '周报',
+    enabled: true,
+    frequency: 'weekly',
+    time: '08:30',
+    weekday: 1,
+    dayOfMonth: 1,
+    month: 1,
+    days: 7,
+    scope: 'all',
+    anchorAt: 0,
+    lastRun: {},
+  },
+  {
+    id: 'schedule-monthly',
+    name: '月报',
+    enabled: true,
+    frequency: 'monthly',
+    time: '08:30',
+    weekday: 1,
+    dayOfMonth: 1,
+    month: 1,
+    days: 30,
+    scope: 'all',
+    anchorAt: 0,
+    lastRun: {},
+  },
+  {
+    id: 'schedule-yearly',
+    name: '年报',
+    enabled: false,
+    frequency: 'yearly',
+    time: '08:30',
+    weekday: 1,
+    dayOfMonth: 1,
+    month: 1,
+    days: 365,
+    scope: 'all',
+    anchorAt: 0,
+    lastRun: {},
+  },
+];
+
+function newBriefSchedule(): BriefSchedule {
+  const now = Date.now();
+  return {
+    id: `schedule-${now.toString(36)}`,
+    name: '自定义简报',
+    enabled: true,
+    frequency: 'custom',
+    time: '08:30',
+    weekday: 1,
+    dayOfMonth: 1,
+    month: 1,
+    days: 7,
+    scope: 'all',
+    anchorAt: now,
+    lastRun: {},
+  };
+}
 
 interface AccountForm {
   id?: string;
@@ -50,6 +178,53 @@ const emptyForm: AccountForm = {
 export function SettingsDialog() {
   const store = useAppStore();
   const { settingsOpen, settingsTab, accounts, settings, info, updateState } = store;
+
+  const [backupInfo, setBackupInfo] = useState<BackupOverview | null>(null);
+  const [scheduleBusy, setScheduleBusy] = useState<string | null>(null);
+
+  // 更新源本地状态：改动后点击「保存更新源」才写入设置
+  const [updateSource, setUpdateSource] = useState<'github' | 'custom'>(settings?.update?.source ?? 'github');
+  const [customUrl, setCustomUrl] = useState(settings?.update?.customUrl ?? '');
+
+  useEffect(() => {
+    setUpdateSource(settings?.update?.source ?? 'github');
+    setCustomUrl(settings?.update?.customUrl ?? '');
+  }, [settings?.update?.source, settings?.update?.customUrl]);
+
+  const saveUpdateSource = async () => {
+    await store.updateSettings({ update: { ...settings?.update, source: updateSource, customUrl: customUrl.trim() } });
+    store.pushToast({
+      type: 'success',
+      title: '更新源已保存',
+      message: updateSource === 'custom' ? '下次检查更新将使用自定义地址' : '下次检查更新将使用 GitHub 官方源',
+    });
+  };
+
+  // 数据存储位置
+  const changeDataDir = async () => {
+    const result = await api.app.chooseDataDir();
+    if (result.canceled) return;
+    if (result.error) {
+      store.pushToast({ type: 'error', title: '更改数据位置失败', message: result.error });
+      return;
+    }
+    const size = ((result.bytes ?? 0) / 1048576).toFixed(1);
+    store.pushToast({
+      type: 'success',
+      title: '数据已复制到新位置',
+      message: `共 ${result.files ?? 0} 个文件、${size}MB`,
+    });
+    const restart = window.confirm(
+      `数据已复制到：\n${result.dataDir}\n\n共 ${result.files ?? 0} 个文件、${size}MB；原目录内容保留，确认无误后可自行删除。\n\n需要现在重启应用使其生效吗？`,
+    );
+    if (restart) await api.app.relaunch();
+  };
+
+  const resetDataDir = async () => {
+    if (!window.confirm('恢复为默认数据位置？现有数据不会被删除，重启后应用将读取默认目录。')) return;
+    await api.app.resetDataDir();
+    await api.app.relaunch();
+  };
   const [tab, setTab] = useState<TabId>('account');
   const [form, setForm] = useState<AccountForm>(emptyForm);
   const [testResult, setTestResult] = useState<{ imap: { ok: boolean; message: string }; smtp: { ok: boolean; message: string } } | null>(null);
@@ -77,6 +252,11 @@ export function SettingsDialog() {
       metadataOnly: settings.ai.metadataOnly,
     });
   }, [settings]);
+
+  // 打开「数据与备份」页时读取备份概览（必须放在提前返回之前，避免 hooks 顺序变化）
+  useEffect(() => {
+    if (settingsOpen && settingsTab === 'data') void loadBackupInfo();
+  }, [settingsOpen, settingsTab]);
 
   if (!settingsOpen) return null;
 
@@ -202,6 +382,136 @@ export function SettingsDialog() {
   const saveBrief = async (patch: Record<string, unknown>) => {
     if (!settings) return;
     await store.updateSettings({ brief: { ...settings.brief, ...patch } });
+  };
+
+  /* ------------------------ 自动简报：多组排程 ------------------------ */
+
+  const saveSchedules = async (schedules: BriefSchedule[]) => {
+    await saveBrief({ schedules });
+  };
+
+  const addSchedule = async () => {
+    await saveSchedules([...(settings?.brief.schedules ?? []), newBriefSchedule()]);
+  };
+
+  const patchSchedule = async (id: string, patch: Partial<BriefSchedule>) => {
+    const next = (settings?.brief.schedules ?? []).map((schedule) =>
+      schedule.id === id ? { ...schedule, ...patch } : schedule,
+    );
+    await saveSchedules(next);
+  };
+
+  const removeSchedule = async (id: string) => {
+    if (!window.confirm('删除这组简报设置？已生成的简报不会被删除。')) return;
+    await saveSchedules((settings?.brief.schedules ?? []).filter((schedule) => schedule.id !== id));
+  };
+
+  const runScheduleNow = async (schedule: BriefSchedule) => {
+    setScheduleBusy(schedule.id);
+    try {
+      const result = await api.brief.runSchedule(schedule.id);
+      if (result.error) {
+        store.pushToast({ type: 'error', title: '生成失败', message: result.error });
+        return;
+      }
+      store.pushToast({
+        type: 'success',
+        title: `已生成「${result.scheduleName}」`,
+        message: result.brief?.title,
+      });
+      await store.reloadBriefs();
+    } finally {
+      setScheduleBusy(null);
+    }
+  };
+
+  /* ------------------------ 界面设置 ------------------------ */
+
+  const saveUISettings = async (patch: Partial<AppSettings['ui']>) => {
+    if (!settings) return;
+    await store.updateSettings({ ui: { ...settings.ui, ...patch } });
+  };
+
+  /* ------------------------ 备份与恢复 ------------------------ */
+
+  const loadBackupInfo = async () => {
+    setBackupInfo(await api.backup.overview());
+  };
+
+  const exportBackup = async () => {
+    const result = await api.backup.export({ includeSecrets: settings?.backup.includeSecrets ?? true });
+    if (result.canceled) return;
+    if (result.error) {
+      store.pushToast({ type: 'error', title: '导出失败', message: result.error });
+      return;
+    }
+    store.pushToast({
+      type: 'success',
+      title: '备份已导出',
+      message: `${result.path}（${result.files ?? 0} 个文件）`,
+    });
+    await loadBackupInfo();
+  };
+
+  const backupNow = async () => {
+    const result = await api.backup.autoRun();
+    if (!result.created) {
+      store.pushToast({ type: 'info', title: '未执行备份', message: result.reason ?? '已有今日备份' });
+      return;
+    }
+    store.pushToast({ type: 'success', title: '已备份到备份目录', message: result.path });
+    await loadBackupInfo();
+  };
+
+  const importBackup = async () => {
+    const picked = await api.backup.inspect();
+    if (picked.canceled || !picked.path) return;
+    const inspection = picked.inspection;
+    if (!inspection?.valid) {
+      store.pushToast({ type: 'error', title: '备份包不可用', message: inspection?.error ?? '无法识别该文件' });
+      return;
+    }
+    const manifest = inspection.manifest;
+    const detail = manifest
+      ? `导出时间：${new Date(manifest.exportedAt).toLocaleString('zh-CN')}\n版本：${manifest.version}\n内容：${manifest.counts.messages} 封邮件、${manifest.counts.briefs} 份简报、${manifest.counts.todos} 条待办`
+      : `${inspection.entries} 个文件`;
+    if (!window.confirm(`导入备份将覆盖当前数据（现有数据会另存为一份 .before-restore-* 目录）：\n\n${detail}\n\n继续导入吗？`)) {
+      return;
+    }
+    const result = await api.backup.import(picked.path);
+    if (!result.ok) {
+      store.pushToast({ type: 'error', title: '导入失败', message: result.error });
+      return;
+    }
+    store.pushToast({
+      type: 'success',
+      title: '备份已恢复',
+      message: `共恢复 ${result.restoredFiles ?? 0} 个文件，原数据已另存`,
+    });
+    if (window.confirm('导入完成，需要现在重启应用以加载恢复后的数据吗？')) {
+      await api.app.relaunch();
+    }
+  };
+
+  const restoreFrom = async (filePath: string) => {
+    if (!window.confirm('用这份备份覆盖当前数据？现有数据会另存为 .before-restore-* 目录。')) return;
+    const result = await api.backup.import(filePath);
+    if (!result.ok) {
+      store.pushToast({ type: 'error', title: '恢复失败', message: result.error });
+      return;
+    }
+    store.pushToast({ type: 'success', title: '已恢复备份', message: `共恢复 ${result.restoredFiles ?? 0} 个文件` });
+    if (window.confirm('恢复完成，需要现在重启应用吗？')) await api.app.relaunch();
+  };
+
+  const removeBackup = async (filePath: string) => {
+    if (!window.confirm('删除这份备份包？此操作不可撤销。')) return;
+    const result = await api.backup.remove(filePath);
+    if (!result.ok) {
+      store.pushToast({ type: 'error', title: '删除失败', message: result.error });
+      return;
+    }
+    await loadBackupInfo();
   };
 
   return (
@@ -547,86 +857,374 @@ export function SettingsDialog() {
                     className="h-3.5 w-3.5 accent-brand-500"
                   />
                   <span className="text-xs font-medium text-shell-text">启用自动简报</span>
-                  <span className="ml-auto text-[10px] text-shell-faint">应用运行时按设定时间自动生成</span>
+                  <span className="ml-auto text-[10px] text-shell-faint">
+                    应用运行时按各组设定时间自动生成
+                  </span>
                 </label>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="field-label">生成频率</label>
-                    <select
-                      value={settings.brief.frequency}
-                      onChange={(e) => void saveBrief({ frequency: e.target.value })}
-                      className="field"
-                    >
-                      <option value="daily">每日</option>
-                      <option value="weekly">每周</option>
-                      <option value="monthly">每月</option>
-                    </select>
+                {(settings.brief.schedules ?? []).length === 0 && (
+                  <div className="rounded border border-shell-lineSoft bg-white px-3 py-6 text-center text-[11px] text-shell-faint">
+                    还没有简报组，点击下方「新建简报组」添加日报、周报、月报或自定义周期。
                   </div>
-                  <div>
-                    <label className="field-label">执行时间</label>
-                    <input
-                      type="time"
-                      value={settings.brief.time}
-                      onChange={(e) => void saveBrief({ time: e.target.value })}
-                      className="field"
-                    />
-                  </div>
-                  {settings.brief.frequency === 'weekly' && (
-                    <div>
-                      <label className="field-label">每周执行日</label>
-                      <select
-                        value={settings.brief.weekday}
-                        onChange={(e) => void saveBrief({ weekday: Number(e.target.value) })}
-                        className="field"
-                      >
-                        {['周一', '周二', '周三', '周四', '周五', '周六', '周日'].map((label, index) => (
-                          <option key={label} value={index + 1}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  {settings.brief.frequency === 'monthly' && (
-                    <div>
-                      <label className="field-label">每月执行日（1-28）</label>
+                )}
+
+                {(settings.brief.schedules ?? []).map((schedule) => (
+                  <div key={schedule.id} className="rounded border border-shell-lineSoft bg-white px-3 py-2.5">
+                    <div className="flex items-center gap-2">
                       <input
-                        type="number"
-                        min={1}
-                        max={28}
-                        value={settings.brief.dayOfMonth}
-                        onChange={(e) => void saveBrief({ dayOfMonth: Number(e.target.value) })}
-                        className="field"
+                        type="checkbox"
+                        checked={schedule.enabled}
+                        title="启用这组简报"
+                        onChange={(e) => void patchSchedule(schedule.id, { enabled: e.target.checked })}
+                        className="h-3.5 w-3.5 accent-brand-500"
                       />
+                      <input
+                        value={schedule.name}
+                        onChange={(e) => void patchSchedule(schedule.id, { name: e.target.value })}
+                        className="w-28 rounded border border-shell-line bg-white px-1.5 py-0.5 text-xs font-medium text-shell-text outline-none focus:border-brand-400"
+                      />
+                      <span className="rounded bg-brand-50 px-1.5 py-[1px] text-[10px] text-brand-700">
+                        {BRIEF_FREQUENCY_OPTIONS.find((item) => item.value === schedule.frequency)?.label}
+                      </span>
+                      <span className="text-[10px] text-shell-faint">{describeSchedule(schedule)}</span>
+                      <div className="ml-auto flex gap-1.5">
+                        <button
+                          type="button"
+                          className="ghost-btn"
+                          disabled={scheduleBusy === schedule.id}
+                          onClick={() => void runScheduleNow(schedule)}
+                        >
+                          <Icon name="sparkles" size={11} />
+                          {scheduleBusy === schedule.id ? '生成中…' : '立即生成'}
+                        </button>
+                        <button type="button" className="ghost-btn" onClick={() => void removeSchedule(schedule.id)}>
+                          删除
+                        </button>
+                      </div>
                     </div>
-                  )}
-                  <div>
-                    <label className="field-label">统计范围</label>
-                    <select
-                      value={settings.brief.scope}
-                      onChange={(e) => void saveBrief({ scope: e.target.value })}
-                      className="field"
-                    >
-                      <option value="inbox">全部账户收件箱</option>
-                      <option value="all">全部邮件（含已发送）</option>
-                    </select>
+
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="field-label">生成频率</label>
+                        <select
+                          value={schedule.frequency}
+                          onChange={(e) => void patchSchedule(schedule.id, { frequency: e.target.value as BriefKind })}
+                          className="field"
+                        >
+                          {BRIEF_FREQUENCY_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="field-label">执行时间</label>
+                        <input
+                          type="time"
+                          value={schedule.time}
+                          onChange={(e) => void patchSchedule(schedule.id, { time: e.target.value })}
+                          className="field"
+                        />
+                      </div>
+                      <div>
+                        <label className="field-label">统计范围</label>
+                        <select
+                          value={schedule.scope}
+                          onChange={(e) => void patchSchedule(schedule.id, { scope: e.target.value as 'inbox' | 'all' })}
+                          className="field"
+                        >
+                          <option value="inbox">全部账户收件箱</option>
+                          <option value="all">全部邮件（含已发送）</option>
+                        </select>
+                      </div>
+
+                      {schedule.frequency === 'weekly' && (
+                        <div>
+                          <label className="field-label">每周执行日</label>
+                          <select
+                            value={schedule.weekday}
+                            onChange={(e) => void patchSchedule(schedule.id, { weekday: Number(e.target.value) })}
+                            className="field"
+                          >
+                            {WEEKDAY_LABELS.map((label, index) => (
+                              <option key={label} value={index + 1}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {(schedule.frequency === 'monthly' || schedule.frequency === 'yearly') && (
+                        <div>
+                          <label className="field-label">执行日（1-28）</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={28}
+                            value={schedule.dayOfMonth}
+                            onChange={(e) => void patchSchedule(schedule.id, { dayOfMonth: Number(e.target.value) })}
+                            className="field"
+                          />
+                        </div>
+                      )}
+
+                      {schedule.frequency === 'yearly' && (
+                        <div>
+                          <label className="field-label">执行月份</label>
+                          <select
+                            value={schedule.month}
+                            onChange={(e) => void patchSchedule(schedule.id, { month: Number(e.target.value) })}
+                            className="field"
+                          >
+                            {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => (
+                              <option key={month} value={month}>
+                                {month} 月
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {schedule.frequency === 'custom' && (
+                        <div>
+                          <label className="field-label">每 N 天（1-365）</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={365}
+                            value={schedule.days}
+                            onChange={(e) => void patchSchedule(schedule.id, { days: Number(e.target.value) })}
+                            className="field"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-1.5 text-[10px] text-shell-faint">
+                      {Object.keys(schedule.lastRun ?? {}).length === 0
+                        ? '尚未生成过'
+                        : `上次生成：${new Date(Math.max(...Object.values(schedule.lastRun))).toLocaleString('zh-CN')}`}
+                    </div>
                   </div>
+                ))}
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button type="button" className="ghost-btn" onClick={() => void addSchedule()}>
+                    <Icon name="plus" size={11} />
+                    新建简报组
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => void saveSchedules(DEFAULT_SCHEDULE_TEMPLATE.map((item) => ({ ...item, anchorAt: Date.now() })))}
+                  >
+                    恢复默认（日报 / 周报 / 月报 / 年报）
+                  </button>
                 </div>
 
                 <div className="rounded border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] leading-4 text-amber-800">
                   <Icon name="alert" size={11} className="mr-1 inline" />
                   自动简报依赖应用处于运行状态（桌面端不注册系统级服务）。若在设定时间应用未启动，将在下次启动后的第一次检查中补生成最近一个周期的简报，同一周期不会重复生成。
                 </div>
+              </div>
+            )}
 
-                <div className="text-[11px] text-shell-sub">
-                  已记录的周期：
-                  {Object.keys(settings.brief.lastRun ?? {}).length === 0
-                    ? '暂无'
-                    : Object.entries(settings.brief.lastRun)
-                        .slice(-4)
-                        .map(([key, value]) => `${key}（${new Date(value).toLocaleString('zh-CN')}）`)
-                        .join('、')}
+            {tab === 'ui' && settings && (
+              <div className="space-y-3">
+                <div className="text-[11px] leading-5 text-shell-sub">
+                  勾选后这些操作会出现在阅读窗格邮件标题下方的操作条上，勾选顺序即展示顺序；超过 7 个时，多出的部分收进「更多」菜单。
+                  与「工具」菜单中的功能一一对应。
+                </div>
+
+                {READER_ACTION_GROUPS.map((group) => (
+                  <div key={group} className="rounded border border-shell-lineSoft bg-white px-3 py-2.5">
+                    <div className="mb-1.5 text-[11px] font-semibold text-shell-sub">{group}</div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                      {READER_ACTIONS.filter((action) => action.group === group).map((action) => {
+                        const selected = (settings.ui.readerActions ?? []).includes(action.id);
+                        return (
+                          <label key={action.id} className="flex cursor-pointer items-center gap-2 text-[11px] text-shell-text">
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() =>
+                                void saveUISettings({
+                                  readerActions: selected
+                                    ? (settings.ui.readerActions ?? []).filter((id) => id !== action.id)
+                                    : [...(settings.ui.readerActions ?? []), action.id],
+                                })
+                              }
+                              className="h-3.5 w-3.5 accent-brand-500"
+                            />
+                            <Icon name={action.icon} size={12} className={action.brand ? 'text-brand-500' : 'text-shell-sub'} />
+                            <span>{action.label}</span>
+                            <span className="truncate text-[10px] text-shell-faint">{action.title}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => void saveUISettings({ readerActions: [...DEFAULT_READER_ACTIONS] })}
+                  >
+                    恢复默认组合
+                  </button>
+                  <span className="text-[11px] text-shell-faint">
+                    当前已选 {(settings.ui.readerActions ?? []).length} 项
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {tab === 'data' && (
+              <div className="space-y-3">
+                <div>
+                  <div className="mb-1 text-[11px] font-semibold text-shell-sub">数据存储位置</div>
+                  <div className="rounded border border-shell-lineSoft bg-[#fafbfc] px-3 py-2 text-[11px] leading-5">
+                    <div className="break-all">
+                      当前目录：{info?.dataDir}
+                      <span className="ml-1 text-shell-faint">{info?.dataDirCustom ? '（自定义）' : '（默认）'}</span>
+                    </div>
+                    <div className="text-shell-faint">
+                      邮件、附件、简报、待办与全部设置都保存在这里；更改位置会把现有数据复制过去，重启后生效，原目录内容保留。
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      <button type="button" className="ghost-btn" onClick={() => void changeDataDir()}>
+                        更改位置…
+                      </button>
+                      {info?.dataDirCustom && (
+                        <button type="button" className="ghost-btn" onClick={() => void resetDataDir()}>
+                          恢复默认位置
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        onClick={() => void api.system.openPath(info?.dataDir ?? '')}
+                      >
+                        打开目录
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-1 text-[11px] font-semibold text-shell-sub">备份与恢复</div>
+                  <div className="rounded border border-shell-lineSoft bg-[#fafbfc] px-3 py-2 text-[11px] leading-5">
+                    <div>
+                      当前数据：{backupInfo?.counts.accounts ?? 0} 个账户 · {backupInfo?.counts.messages ?? 0} 封邮件 ·{' '}
+                      {backupInfo?.counts.briefs ?? 0} 份简报 · {backupInfo?.counts.todos ?? 0} 条待办
+                    </div>
+                    <div className="break-all text-shell-faint">备份目录：{backupInfo?.backupDir}</div>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      <button type="button" className="primary-btn" onClick={() => void exportBackup()}>
+                        <Icon name="download" size={12} />
+                        导出备份…
+                      </button>
+                      <button type="button" className="ghost-btn" onClick={() => void importBackup()}>
+                        <Icon name="archive" size={12} />
+                        导入备份…
+                      </button>
+                      <button type="button" className="ghost-btn" onClick={() => void backupNow()}>
+                        备份到备份目录
+                      </button>
+                      <button type="button" className="ghost-btn" onClick={() => void api.backup.openDir()}>
+                        打开备份目录
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded border border-shell-lineSoft bg-[#fafbfc] px-3 py-2.5">
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={settings?.backup.autoEnabled ?? false}
+                      onChange={(e) => void store.updateSettings({ backup: { ...settings?.backup, autoEnabled: e.target.checked } })}
+                      className="h-3.5 w-3.5 accent-brand-500"
+                    />
+                    <span className="text-[11px] font-medium text-shell-text">每天首次启动自动备份</span>
+                  </label>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="field-label">保留份数</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={settings?.backup.keep ?? 7}
+                        onChange={(e) => void store.updateSettings({ backup: { ...settings?.backup, keep: Number(e.target.value) } })}
+                        className="field"
+                      />
+                    </div>
+                    <div>
+                      <label className="field-label">备份目录（留空用默认）</label>
+                      <input
+                        value={settings?.backup.directory ?? ''}
+                        placeholder={backupInfo?.backupDir ?? ''}
+                        onChange={(e) => void store.updateSettings({ backup: { ...settings?.backup, directory: e.target.value } })}
+                        className="field"
+                      />
+                    </div>
+                  </div>
+                  <label className="mt-2 flex cursor-pointer items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={settings?.backup.includeSecrets ?? true}
+                      onChange={(e) => void store.updateSettings({ backup: { ...settings?.backup, includeSecrets: e.target.checked } })}
+                      className="h-3.5 w-3.5 accent-brand-500"
+                    />
+                    <span className="text-[11px] text-shell-text">
+                      备份包含凭据（邮箱密码与 AI Key，仍为系统加密存储；不含则导入后需重新填写）
+                    </span>
+                  </label>
+                </div>
+
+                <div>
+                  <div className="mb-1 flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-shell-sub">
+                      备份目录中的备份包（{backupInfo?.backups.length ?? 0}）
+                    </span>
+                    <button type="button" className="ghost-btn" onClick={() => void loadBackupInfo()}>
+                      <Icon name="refresh" size={11} />
+                      刷新
+                    </button>
+                  </div>
+                  <div className="max-h-[160px] overflow-auto rounded border border-shell-lineSoft bg-white">
+                    {(backupInfo?.backups ?? []).length === 0 && (
+                      <div className="px-3 py-3 text-center text-[11px] text-shell-faint">暂无备份包</div>
+                    )}
+                    {(backupInfo?.backups ?? []).map((entry) => (
+                      <div key={entry.path} className="flex items-center gap-2 border-b border-shell-lineSoft px-3 py-1.5 text-[11px] last:border-b-0">
+                        <Icon name="archive" size={12} className="text-shell-sub" />
+                        <span className="truncate text-shell-text">{entry.name}</span>
+                        <span className="text-shell-faint">{fileSize(entry.size)}</span>
+                        <span className="text-shell-faint">{new Date(entry.time).toLocaleString('zh-CN')}</span>
+                        <div className="ml-auto flex gap-1.5">
+                          <button type="button" className="ghost-btn" onClick={() => void restoreFrom(entry.path)}>
+                            恢复
+                          </button>
+                          <button type="button" className="ghost-btn" onClick={() => void removeBackup(entry.path)}>
+                            删除
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] leading-4 text-amber-800">
+                  <Icon name="alert" size={11} className="mr-1 inline" />
+                  导入备份会覆盖当前数据：应用会先把现有数据目录整体另存为一份
+                  <code className="mx-1 rounded bg-white/70 px-1">.before-restore-*</code>
+                  目录，再写入备份内容，因此可以回退。
                 </div>
               </div>
             )}
@@ -730,9 +1328,64 @@ export function SettingsDialog() {
                   </label>
                 </div>
 
+                <div className="rounded border border-shell-lineSoft bg-[#fafbfc] px-3 py-2.5">
+                  <div className="mb-1.5 text-xs font-semibold text-shell-text">更新源</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      className={updateSource === 'github' ? 'primary-btn' : 'ghost-btn'}
+                      onClick={() => setUpdateSource('github')}
+                    >
+                      GitHub 官方
+                    </button>
+                    <button
+                      type="button"
+                      className={updateSource === 'custom' ? 'primary-btn' : 'ghost-btn'}
+                      onClick={() => setUpdateSource('custom')}
+                    >
+                      镜像 / 自定义地址
+                    </button>
+                  </div>
+
+                  {updateSource === 'custom' && (
+                    <div className="mt-2">
+                      <input
+                        value={customUrl}
+                        onChange={(event) => setCustomUrl(event.target.value)}
+                        placeholder="https://ghproxy.net/https://github.com/f891127/zhimail/releases/latest/download"
+                        className="w-full rounded border border-shell-line bg-white px-2 py-1 text-[11px] text-shell-text outline-none focus:border-brand-400"
+                      />
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {UPDATE_MIRRORS.map((mirror) => (
+                          <button
+                            key={mirror.label}
+                            type="button"
+                            className="ghost-btn"
+                            onClick={() => setCustomUrl(mirror.url)}
+                          >
+                            {mirror.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-1.5 text-[11px] leading-5 text-shell-faint">
+                        该地址需要能直接访问到 latest.yml 与安装包；镜像站点为第三方服务，可用性可能变化，可先点「检查更新」验证。
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <button type="button" className="ghost-btn" onClick={() => void saveUpdateSource()}>
+                      保存更新源
+                    </button>
+                    <span className="text-[11px] text-shell-faint">
+                      当前：{settings?.update?.source === 'custom' ? '自定义地址' : 'GitHub 官方'}
+                    </span>
+                  </div>
+                </div>
+
                 <p className="text-[11px] leading-5 text-shell-faint">
-                  更新包发布在 GitHub Releases（f891127/zhimail）。客户端通过 latest.yml 比对版本，仅下载差异部分；
-                  内网环境可在「关于」中查看数据目录，手动替换安装包。
+                  更新包发布在 GitHub Releases（f891127/zhimail）。客户端通过 latest.yml 比对版本，仅下载差异部分。
+                  若提示连接超时，通常是本机网络无法直连 GitHub，可切换到镜像地址后重试。
                 </p>
               </div>
             )}
@@ -745,6 +1398,35 @@ export function SettingsDialog() {
                   </div>
                 </div>
 
+                <div>
+                  <div className="mb-1 text-[11px] font-semibold text-shell-sub">数据存储位置</div>
+                  <div className="rounded border border-shell-lineSoft bg-[#fafbfc] px-3 py-2 text-[11px] leading-5">
+                    <div className="break-all">
+                      当前目录：{info?.dataDir}
+                      <span className="ml-1 text-shell-faint">{info?.dataDirCustom ? '（自定义）' : '（默认）'}</span>
+                    </div>
+                    <div className="text-shell-faint">
+                      邮件、附件、简报、待办与全部设置都保存在这里；更改位置会把现有数据复制过去，重启后生效，原目录内容保留。
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      <button type="button" className="ghost-btn" onClick={() => void changeDataDir()}>
+                        更改位置…
+                      </button>
+                      {info?.dataDirCustom && (
+                        <button type="button" className="ghost-btn" onClick={() => void resetDataDir()}>
+                          恢复默认位置
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        onClick={() => void api.system.openPath(info?.dataDir ?? '')}
+                      >
+                        打开目录
+                      </button>
+                    </div>
+                  </div>
+                </div>
                 <div className="rounded border border-shell-lineSoft bg-[#fafbfc] px-3 py-2 text-[11px] leading-5">
                   <div>数据目录：{info?.dataDir}</div>
                   <div>

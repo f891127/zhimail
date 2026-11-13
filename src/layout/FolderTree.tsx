@@ -1,7 +1,10 @@
 /** 左侧文件夹树：账户 / 内置文件夹 / 自定义文件夹 / 邮件简报 / 待办入口 */
 
+import { useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { Icon, type IconName } from '@/components/Icon';
+import { ContextMenu, type ContextMenuItem } from '@/components/ContextMenu';
+import { api } from '@/lib/api';
 import type { Folder } from '@/types/zhimail';
 
 const KIND_ICON: Record<string, IconName> = {
@@ -31,11 +34,13 @@ function FolderRow({
   active,
   indent = 0,
   onClick,
+  onContext,
 }: {
   folder: Folder;
   active: boolean;
   indent?: number;
   onClick: () => void;
+  onContext?: (event: React.MouseEvent, folder: Folder) => void;
 }) {
   const icon = KIND_ICON[folder.kind] ?? 'folder';
   const color = KIND_COLOR[folder.kind] ?? 'text-shell-sub';
@@ -43,6 +48,7 @@ function FolderRow({
     <button
       type="button"
       onClick={onClick}
+      onContextMenu={(event) => onContext?.(event, folder)}
       className={`group flex h-[27px] w-full items-center gap-1.5 rounded-[3px] pr-2 text-left text-xs transition-colors duration-120 ${
         active ? 'bg-brand-500 text-white' : 'text-shell-text hover:bg-black/[0.045]'
       }`}
@@ -90,6 +96,45 @@ export function FolderTree() {
     info,
   } = store;
 
+  const [creatingIn, setCreatingIn] = useState<string | null>(null);
+  const [newName, setNewName] = useState('');
+  const [menu, setMenu] = useState<{ x: number; y: number; folder: Folder } | null>(null);
+
+  const submitCreate = async () => {
+    const name = newName.trim();
+    if (!creatingIn || !name) {
+      setCreatingIn(null);
+      setNewName('');
+      return;
+    }
+    try {
+      await api.folders.create({ accountId: creatingIn, name });
+      await store.reloadFolders();
+      store.pushToast({ type: 'success', title: `已创建文件夹「${name}」` });
+    } catch (error) {
+      store.pushToast({ type: 'error', title: '创建失败', message: (error as Error).message });
+    } finally {
+      setCreatingIn(null);
+      setNewName('');
+    }
+  };
+
+  const removeFolder = async (folder: Folder) => {
+    if (!window.confirm(`删除文件夹「${folder.name}」？文件夹内的邮件会一并删除，此操作不可撤销。`)) return;
+    try {
+      await api.folders.remove(folder.id);
+      await store.reloadFolders();
+      store.pushToast({ type: 'success', title: `已删除文件夹「${folder.name}」` });
+    } catch (error) {
+      store.pushToast({ type: 'error', title: '删除失败', message: (error as Error).message });
+    }
+  };
+
+  const folderMenuItems = (folder: Folder): ContextMenuItem[] => [
+    { label: '在此新建子文件夹…', onClick: () => { setCreatingIn(folder.accountId); setNewName(''); } },
+    { label: '删除文件夹', disabled: folder.kind !== 'custom', onClick: () => void removeFolder(folder) },
+  ];
+
   const briefRoot = folders.find((folder) => folder.id === 'briefs');
   const briefGroups = folders.filter((folder) => folder.parentId === 'briefs');
 
@@ -122,12 +167,56 @@ export function FolderTree() {
                 <button
                   type="button"
                   className="hidden text-shell-faint hover:text-brand-600 group-hover:block"
+                  title="在此账户下新建文件夹"
+                  onClick={() => {
+                    setCreatingIn(account.id);
+                    setNewName('');
+                  }}
+                >
+                  <Icon name="plus" size={12} />
+                </button>
+                <button
+                  type="button"
+                  className="hidden text-shell-faint hover:text-brand-600 group-hover:block"
                   title={account.demo ? '演示邮箱（无需同步）' : '同步此账户'}
                   onClick={() => void syncNow(account.id)}
                 >
                   <Icon name="refresh" size={12} />
                 </button>
               </div>
+
+              {creatingIn === account.id && (
+                <div className="flex items-center gap-1 py-1 pl-7 pr-2">
+                  <input
+                    autoFocus
+                    value={newName}
+                    onChange={(event) => setNewName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') void submitCreate();
+                      if (event.key === 'Escape') {
+                        setCreatingIn(null);
+                        setNewName('');
+                      }
+                    }}
+                    placeholder="文件夹名称，回车确认"
+                    className="h-[22px] flex-1 rounded border border-brand-300 bg-white px-1.5 text-[11px] text-shell-text outline-none"
+                  />
+                  <button type="button" className="text-brand-600" title="创建" onClick={() => void submitCreate()}>
+                    <Icon name="check" size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="text-shell-faint hover:text-shell-text"
+                    title="取消"
+                    onClick={() => {
+                      setCreatingIn(null);
+                      setNewName('');
+                    }}
+                  >
+                    <Icon name="close" size={12} />
+                  </button>
+                </div>
+              )}
 
               {expanded &&
                 accountFolders.map((folder) => (
@@ -137,6 +226,10 @@ export function FolderTree() {
                     active={selectedFolderId === folder.id && view === 'mail'}
                     indent={1}
                     onClick={() => void selectFolder(folder.id)}
+                    onContext={(event, target) => {
+                      event.preventDefault();
+                      setMenu({ x: event.clientX, y: event.clientY, folder: target });
+                    }}
                   />
                 ))}
             </div>
@@ -207,6 +300,15 @@ export function FolderTree() {
           <span className="text-[10px] text-shell-faint">v{info?.version ?? '1.0.0'}</span>
         </button>
       </div>
+
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={folderMenuItems(menu.folder)}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </div>
   );
 }

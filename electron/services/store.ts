@@ -16,6 +16,7 @@ import type {
   AccountSecret,
   AppSettings,
   Brief,
+  BriefSchedule,
   Folder,
   MessageBody,
   MessageMeta,
@@ -38,18 +39,36 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   brief: {
     autoEnabled: false,
-    frequency: 'daily',
-    time: '08:30',
-    weekday: 1,
-    dayOfMonth: 1,
-    scope: 'inbox',
-    lastRun: {},
+    schedules: [
+      defaultSchedule('daily', '日报', true),
+      defaultSchedule('weekly', '周报', true),
+      defaultSchedule('monthly', '月报', true),
+      defaultSchedule('yearly', '年报', false),
+    ],
   },
   ui: {
     readingPane: true,
     listDensity: 'compact',
     showSnippet: true,
     pageSize: 200,
+    readerActions: [
+      'reply',
+      'replyAll',
+      'forward',
+      'summarize',
+      'threadSummary',
+      'replies',
+      'triage',
+      'translateZh',
+      'translateEn',
+      'todos',
+    ],
+  },
+  backup: {
+    autoEnabled: false,
+    directory: '',
+    keep: 7,
+    includeSecrets: true,
   },
   sync: {
     days: 30,
@@ -61,8 +80,58 @@ export const DEFAULT_SETTINGS: AppSettings = {
   update: {
     autoCheck: true,
     autoDownload: false,
+    source: 'github',
+    customUrl: '',
   },
 };
+
+/** 默认简报排程：每天/每周/每月/每年各一组，可在设置中增删与改周期 */
+function defaultSchedule(
+  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly',
+  name: string,
+  enabled: boolean,
+): BriefSchedule {
+  return {
+    id: `schedule-${frequency}`,
+    name,
+    enabled,
+    frequency,
+    time: '08:30',
+    weekday: 1,
+    dayOfMonth: 1,
+    month: 1,
+    days: frequency === 'daily' ? 1 : frequency === 'weekly' ? 7 : frequency === 'monthly' ? 30 : 365,
+    scope: 'all',
+    anchorAt: 0,
+    lastRun: {},
+  };
+}
+
+/** 兼容旧版单组简报设置：迁移为一组排程 */
+function migrateBriefSchedules(raw: AppSettings['brief'] | undefined): BriefSchedule[] {
+  if (!raw) return DEFAULT_SETTINGS.brief.schedules;
+  if (Array.isArray(raw.schedules) && raw.schedules.length > 0) {
+    return raw.schedules.map((schedule) => ({
+      ...defaultSchedule('daily', '日报', true),
+      ...schedule,
+      lastRun: schedule.lastRun ?? {},
+    }));
+  }
+  if (raw.frequency) {
+    const base = defaultSchedule(raw.frequency, `${raw.frequency === 'daily' ? '日报' : raw.frequency === 'weekly' ? '周报' : '月报'}`, true);
+    return [
+      {
+        ...base,
+        time: raw.time ?? base.time,
+        weekday: raw.weekday ?? base.weekday,
+        dayOfMonth: raw.dayOfMonth ?? base.dayOfMonth,
+        scope: raw.scope ?? base.scope,
+        lastRun: raw.lastRun ?? {},
+      },
+    ];
+  }
+  return DEFAULT_SETTINGS.brief.schedules;
+}
 
 interface PersistState {
   version: number;
@@ -119,10 +188,14 @@ export class Store {
           ...DEFAULT_SETTINGS,
           ...parsed.settings,
           ai: { ...DEFAULT_SETTINGS.ai, ...parsed.settings?.ai },
-          brief: { ...DEFAULT_SETTINGS.brief, ...parsed.settings?.brief },
+          brief: {
+            autoEnabled: parsed.settings?.brief?.autoEnabled ?? DEFAULT_SETTINGS.brief.autoEnabled,
+            schedules: migrateBriefSchedules(parsed.settings?.brief),
+          },
           ui: { ...DEFAULT_SETTINGS.ui, ...parsed.settings?.ui },
           sync: { ...DEFAULT_SETTINGS.sync, ...parsed.settings?.sync },
           translate: { ...DEFAULT_SETTINGS.translate, ...parsed.settings?.translate },
+          backup: { ...DEFAULT_SETTINGS.backup, ...parsed.settings?.backup },
           update: { ...DEFAULT_SETTINGS.update, ...parsed.settings?.update },
         };
       } catch (error) {
@@ -141,6 +214,16 @@ export class Store {
       }
     }
     this.schedulePersist(true);
+  }
+
+  /** 数据规模统计：用于备份信息展示 */
+  describeCounts(): { accounts: number; messages: number; briefs: number; todos: number } {
+    return {
+      accounts: this.state.accounts.length,
+      messages: this.state.messages.length,
+      briefs: this.state.briefs.length,
+      todos: this.state.todos.length,
+    };
   }
 
   get root(): string {

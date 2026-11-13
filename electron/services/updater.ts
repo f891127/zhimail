@@ -73,6 +73,28 @@ function normalizeNotes(notes: unknown): string {
   return '';
 }
 
+/** 解析当前生效的更新源；custom 时使用通用源（可填镜像前缀） */
+export function resolveUpdateFeed(): Record<string, unknown> {
+  const settings = store.getSettings().update;
+  const customUrl = (settings?.customUrl ?? '').trim();
+  if (settings?.source === 'custom' && customUrl) {
+    return {
+      provider: 'generic',
+      url: customUrl.endsWith('/') ? customUrl : `${customUrl}/`,
+    };
+  }
+  return { provider: 'github', owner: UPDATE_OWNER, repo: UPDATE_REPO };
+}
+
+/** 应用更新源；切换设置后需要重新调用 */
+export function applyUpdateFeed(): void {
+  try {
+    autoUpdater.setFeedURL(resolveUpdateFeed() as never);
+  } catch (error) {
+    console.warn('[updater] 设置更新源失败', (error as Error).message);
+  }
+}
+
 export function initUpdater(): void {
   if (initialized) return;
   initialized = true;
@@ -82,11 +104,7 @@ export function initUpdater(): void {
   autoUpdater.allowPrerelease = false;
   autoUpdater.logger = null;
 
-  try {
-    autoUpdater.setFeedURL({ provider: 'github', owner: UPDATE_OWNER, repo: UPDATE_REPO });
-  } catch (error) {
-    console.warn('[updater] 设置更新源失败', (error as Error).message);
-  }
+  applyUpdateFeed();
 
   autoUpdater.on('checking-for-update', () => setState({ phase: 'checking', error: undefined }));
   autoUpdater.on('update-available', (info) =>
@@ -109,12 +127,16 @@ export function initUpdater(): void {
   autoUpdater.on('update-downloaded', (info) =>
     setState({ phase: 'downloaded', version: info.version, percent: 100 }),
   );
-  autoUpdater.on('error', (error) =>
+  autoUpdater.on('error', (error) => {
+    const raw = String(error?.message ?? error);
+    const networkIssue = /ERR_CONNECTION|ETIMEDOUT|ENOTFOUND|ECONNRESET|timeout|socket hang up/i.test(raw);
     setState({
       phase: 'error',
-      error: String(error?.message ?? error).slice(0, 400),
-    }),
-  );
+      error: networkIssue
+        ? `无法连接更新服务器（${raw.slice(0, 120)}）。常见原因是网络无法直连 GitHub，可在下方把更新源切换为镜像地址后重试。`
+        : raw.slice(0, 400),
+    });
+  });
 
   // 启动后自动检查（打包版本才可用）
   if (app.isPackaged && (store.getSettings().update?.autoCheck ?? true)) {
@@ -137,7 +159,14 @@ export async function checkForUpdates(): Promise<UpdateState> {
   try {
     await autoUpdater.checkForUpdates();
   } catch (error) {
-    setState({ phase: 'error', error: String((error as Error).message).slice(0, 400) });
+    const raw = String((error as Error).message);
+    const networkIssue = /ERR_CONNECTION|ETIMEDOUT|ENOTFOUND|ECONNRESET|timeout|socket hang up/i.test(raw);
+    setState({
+      phase: 'error',
+      error: networkIssue
+        ? `无法连接更新服务器（${raw.slice(0, 120)}）。常见原因是网络无法直连 GitHub，可在下方把更新源切换为镜像地址后重试。`
+        : raw.slice(0, 400),
+    });
   }
   return state;
 }

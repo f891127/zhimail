@@ -107,13 +107,47 @@
 
 ### 21. 发版流程与版本历史
 - [x] 每次发版同时更新 `package.json` 版本号与 `CHANGELOG.md` 对应小节，二者是客户端日志、更新清单与 Release 说明的唯一来源。
-- [x] 已发布版本：v1.0.0（首个版本）、v1.1.0（内置版本更新日志）、v1.1.1 与 v1.1.2（更新清单写入版本说明）。
+- [x] 已发布版本：v1.0.0（首个版本）、v1.1.0（内置版本更新日志）、v1.1.1 与 v1.1.2（更新清单写入版本说明）、v1.1.3（便携版随 Release 发布）、v1.2.0（多组自动简报、余额、AI 面板最大化、文件夹管理、界面与备份设置）。
 - 证据：https://github.com/f891127/zhimail/releases
 
 ### 20. 构建产物与仓库
 - [x] 代码推送至 GitHub 公开仓库 https://github.com/f891127/zhimail （完整源码、README、CHANGELOG、MIT 许可证、工作流）。
 - [x] 本地产出免安装便携包 `ZhiMail-1.1.2-x64-portable.zip`（解压即用）。
 - [x] NSIS 安装包由 GitHub Actions 的 Windows runner 构建（本沙箱为 ARM Linux，wine32 不可用，无法本地生成 NSIS）。
+
+### 22. 自动简报多组排程（日报 / 周报 / 月报 / 年报 / 自定义）
+- [x] 设置 → 自动简报支持任意多组排程：每组独立名称、周期（每日/每周/每月/每年/每 N 天）、执行时间、执行日、统计范围与启用开关。
+- [x] 各组独立记录 `lastRun`，同一周期不重复生成；支持「立即生成」手动触发；「恢复默认」一键还原日报/周报/月报/年报四组。
+- [x] 简报分组新增「年报」；自定义周期按锚点时间戳计算，跨重启稳定。
+- [x] 旧版单组设置自动迁移为一条排程，历史 `lastRun` 保留。
+- 证据：`electron/services/scheduler.ts`、`shots/12-brief-schedules.png`、端到端「简报周期（每日/每周/每月/每年/自定义）」5 项断言。
+
+### 23. 模型账户余额（状态栏）
+- [x] 右下角显示当前模型账户余额，支持 DeepSeek、Moonshot、SiliconFlow、OpenRouter；OpenAI 等无公开余额接口的服务商显示「不支持」。
+- [x] 点击强制刷新（60 秒缓存），悬停显示赠送余额、充值余额、已用金额与更新时间；未配置 Key 时不显示。
+- 证据：`electron/services/ai/balance.ts`、`electron/ipc.ts`（`ai/balance`）、`src/layout/StatusBar.tsx`。
+
+### 24. AI 助手面板最大化
+- [x] 面板标题栏新增最大化/还原按钮；最大化时文件夹树、邮件列表、阅读窗格暂时隐藏，AI 面板占满窗口。
+- [x] 关闭面板自动退出最大化，避免其它区域被永久隐藏。
+- 证据：`src/App.tsx`、`src/features/ai/AIAssistantPanel.tsx`、`shots/13-ai-maximized.png`。
+
+### 25. 文件夹管理与归档
+- [x] 账户行悬停出现「+」，就地输入名称新建文件夹（回车确认、Esc 取消）。
+- [x] 文件夹右键菜单：在此新建子文件夹、删除文件夹（仅自定义文件夹可删）。
+- [x] 邮件右键「移动到…」列出同账户其它文件夹，直接归档。
+- 证据：`src/layout/FolderTree.tsx`、`src/layout/MessageList.tsx`。
+
+### 26. 界面设置（阅读窗格操作条）
+- [x] 设置 → 界面：按分组勾选操作条上的操作，勾选顺序即展示顺序，超过 7 项收进「更多」。
+- [x] 「恢复默认组合」一键还原；当前已选数量实时显示。
+- 证据：`src/lib/readerActions.ts`、`shots/10-reader-actions.png`。
+
+### 27. 数据目录与备份
+- [x] 设置 → 数据与备份：查看当前数据目录、更改位置（复制数据后重启生效）、打开目录、恢复默认。
+- [x] 导出备份包（zip，含 manifest 校验）、导入前校验并列出内容、覆盖前自动另存 `.before-restore-*`。
+- [x] 每日首次启动自动备份、保留份数、备份目录自定义、可选是否打包凭据；备份列表支持恢复与删除。
+- 证据：`electron/services/backup.ts`、`electron/services/location.ts`、`shots/11-data-backup.png`。
 
 ## 后续可做
 

@@ -6,6 +6,8 @@ import { Icon } from '@/components/Icon';
 import { addressLabel, fileSize, fullTime, senderName } from '@/lib/format';
 import { buildMailDocument, renderMarkdown, textToHtml } from '@/lib/markdown';
 import { api } from '@/lib/api';
+import { ContextMenu, type ContextMenuItem } from '@/components/ContextMenu';
+import { DEFAULT_READER_ACTIONS, READER_ACTION_VISIBLE_LIMIT, findReaderAction } from '@/lib/readerActions';
 import type { MessageMeta } from '@/types/zhimail';
 
 function EmptyReading() {
@@ -38,6 +40,7 @@ export function ReadingPane() {
   const { selectedMessage, selectedMessageId, aiOutputs, aiBusy } = store;
   const [threadMessages, setThreadMessages] = useState<MessageMeta[]>([]);
   const [showThread, setShowThread] = useState(false);
+  const [moreMenu, setMoreMenu] = useState<{ x: number; y: number } | null>(null);
   const [showAllRecipients, setShowAllRecipients] = useState(false);
 
   useEffect(() => {
@@ -65,6 +68,39 @@ export function ReadingPane() {
   const flagged = selectedMessage?.flags.includes('\\Flagged') ?? false;
 
   if (!selectedMessage) return <EmptyReading />;
+
+  // 操作条配置：未配置时使用默认组合
+  const configuredIds =
+    store.settings?.ui?.readerActions && store.settings.ui.readerActions.length
+      ? store.settings.ui.readerActions
+      : DEFAULT_READER_ACTIONS;
+  const configuredActions = configuredIds
+    .map((id) => findReaderAction(id))
+    .filter((action): action is NonNullable<typeof action> => Boolean(action));
+  const visibleActions = configuredActions.slice(0, READER_ACTION_VISIBLE_LIMIT);
+  const overflowActions = configuredActions.slice(READER_ACTION_VISIBLE_LIMIT);
+
+  const readerHandlers: Record<string, () => void> = {
+    reply: () => store.replyToMessage('reply'),
+    replyAll: () => store.replyToMessage('replyAll'),
+    forward: () => store.replyToMessage('forward'),
+    analysis: () => store.setAIPanel(true, 'analysis'),
+    summarize: () => void store.runSummarize(selectedMessage.id),
+    threadSummary: () => void store.runThreadSummary(selectedMessage.threadId),
+    replies: () => void store.runReplies(selectedMessage.id),
+    triage: () => void store.runTriage(selectedMessage.id),
+    translateZh: () => void store.runTranslate(selectedMessage.id, '中文'),
+    translateEn: () => void store.runTranslate(selectedMessage.id, 'English'),
+    todos: () => void store.extractTodosFromMessage(selectedMessage.id),
+  };
+
+  const overflowItems: ContextMenuItem[] = overflowActions.map((action) => ({
+    label: action.label,
+    disabled: aiBusy,
+    onClick: () => readerHandlers[action.id]?.(),
+  }));
+
+
 
   return (
     <div className="flex h-full min-w-0 flex-col bg-white">
@@ -143,83 +179,38 @@ export function ReadingPane() {
           </div>
         </div>
 
-        {/* AI 操作条 */}
+        {/* 操作条：显示哪些操作可在「设置 → 界面」中配置 */}
         <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-shell-lineSoft py-1.5">
-          <button type="button" className="tool-btn" onClick={() => store.replyToMessage('reply')}>
-            <Icon name="reply" size={13} /> 回复
-          </button>
-          <button type="button" className="tool-btn" onClick={() => store.replyToMessage('replyAll')}>
-            <Icon name="reply-all" size={13} /> 全部
-          </button>
-          <button type="button" className="tool-btn" onClick={() => store.replyToMessage('forward')}>
-            <Icon name="forward" size={13} /> 转发
-          </button>
-          <div className="mx-0.5 h-3.5 w-px bg-shell-lineSoft" />
-          <button
-            type="button"
-            className="tool-btn text-brand-600"
-            disabled={aiBusy}
-            onClick={() => void store.runSummarize(selectedMessage.id)}
-          >
-            <Icon name="sparkles" size={13} /> AI 摘要
-          </button>
-          <button
-            type="button"
-            className="tool-btn text-brand-600"
-            disabled={aiBusy}
-            onClick={() => void store.runThreadSummary(selectedMessage.threadId)}
-            title="生成整个会话串的摘要"
-          >
-            <Icon name="document" size={13} />
-          </button>
-          <button
-            type="button"
-            className="tool-btn text-brand-600"
-            disabled={aiBusy}
-            onClick={() => void store.runReplies(selectedMessage.id)}
-            title="一键生成 3 条回复草稿"
-          >
-            <Icon name="send" size={13} />
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            disabled={aiBusy}
-            onClick={() => void store.runTriage(selectedMessage.id)}
-            title="判断重要度与紧急度"
-          >
-            <Icon name="shield" size={13} />
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            disabled={aiBusy}
-            onClick={() => void store.runTranslate(selectedMessage.id, '中文')}
-            title="一键翻译为中文"
-          >
-            <Icon name="translate" size={13} />
-            译中
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            disabled={aiBusy}
-            onClick={() => void store.runTranslate(selectedMessage.id, 'English')}
-            title="一键翻译为英文"
-          >
-            译英
-          </button>
-          <button
-            type="button"
-            className="tool-btn"
-            disabled={aiBusy}
-            onClick={() => void store.extractTodosFromMessage(selectedMessage.id)}
-            title="从本邮件提取待办事项"
-          >
-            <Icon name="checklist" size={13} />
-          </button>
+          {visibleActions.map((action) => (
+            <button
+              key={action.id}
+              type="button"
+              className={`tool-btn ${action.brand ? 'text-brand-600' : ''}`}
+              disabled={aiBusy && action.id !== 'reply' && action.id !== 'replyAll' && action.id !== 'forward'}
+              onClick={readerHandlers[action.id]}
+              title={action.title}
+            >
+              <Icon name={action.icon} size={13} />
+              {!action.iconOnly && action.label}
+            </button>
+          ))}
+          {overflowActions.length > 0 && (
+            <button
+              type="button"
+              className="tool-btn"
+              title="更多操作"
+              onClick={(event) => setMoreMenu({ x: event.clientX, y: event.clientY })}
+            >
+              <Icon name="more" size={13} />
+              更多
+            </button>
+          )}
         </div>
       </div>
+
+      {moreMenu && (
+        <ContextMenu x={moreMenu.x} y={moreMenu.y} items={overflowItems} onClose={() => setMoreMenu(null)} />
+      )}
 
       {/* 重要度提示 */}
       {triage && (

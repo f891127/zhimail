@@ -31,19 +31,18 @@ const emptySettings: AppSettings = {
     metadataOnly: false,
     hasApiKey: false,
   },
-  brief: {
-    autoEnabled: false,
-    frequency: 'daily',
-    time: '08:30',
-    weekday: 1,
-    dayOfMonth: 1,
-    scope: 'inbox',
-    lastRun: {},
+  brief: { autoEnabled: false, schedules: [] },
+  ui: {
+    readingPane: true,
+    listDensity: 'compact',
+    showSnippet: true,
+    pageSize: 200,
+    readerActions: [],
   },
-  ui: { readingPane: true, listDensity: 'compact', showSnippet: true, pageSize: 200 },
+  backup: { autoEnabled: false, directory: '', keep: 7, includeSecrets: true },
   sync: { days: 30, limit: 500 },
   translate: { engine: 'auto' },
-  update: { autoCheck: true, autoDownload: false },
+  update: { autoCheck: true, autoDownload: false, source: 'github', customUrl: '' },
 };
 
 const emptyInfo: AppInfo = {
@@ -60,7 +59,12 @@ function notAvailable(): never {
 }
 
 const mockApi: ZhimailApi = {
-  app: { info: async () => emptyInfo },
+  app: {
+    info: async () => emptyInfo,
+    chooseDataDir: async () => ({ canceled: true }),
+    resetDataDir: async () => ({ dataDir: emptyInfo.dataDir }),
+    relaunch: async () => false,
+  },
   accounts: {
     list: async () => [] as Account[],
     save: notAvailable,
@@ -87,6 +91,13 @@ const mockApi: ZhimailApi = {
   search: { run: async () => [], ai: notAvailable },
   ai: {
     test: notAvailable,
+    balance: async () => ({
+      ok: false,
+      supported: false,
+      provider: 'browser',
+      error: '浏览器预览模式',
+      fetchedAt: Date.now(),
+    }),
     summarize: notAvailable,
     summarizeThread: notAvailable,
     analyze: notAvailable,
@@ -101,6 +112,7 @@ const mockApi: ZhimailApi = {
     get: async () => undefined,
     generate: notAvailable,
     remove: notAvailable,
+    runSchedule: async () => ({ scheduleId: '', scheduleName: '', error: '浏览器预览模式不支持' }),
     export: notAvailable,
   },
   todos: {
@@ -113,6 +125,20 @@ const mockApi: ZhimailApi = {
   settings: {
     get: async () => emptySettings,
     update: async () => emptySettings,
+  },
+  backup: {
+    overview: async () => ({
+      dataDir: emptyInfo.dataDir,
+      backupDir: '',
+      backups: [],
+      counts: { accounts: 0, messages: 0, briefs: 0, todos: 0 },
+    }),
+    export: async () => ({ canceled: true }),
+    inspect: async () => ({ canceled: true }),
+    import: async () => ({ ok: false, error: '浏览器预览模式不支持导入备份' }),
+    autoRun: async () => ({ created: false, reason: '浏览器预览模式' }),
+    remove: async () => ({ ok: false, error: '浏览器预览模式' }),
+    openDir: async () => ({ ok: false, error: '浏览器预览模式' }),
   },
   demo: { reset: notAvailable },
   system: {

@@ -142,23 +142,73 @@ export interface AISettings {
   hasApiKey?: boolean;
 }
 
-export interface BriefScheduleSettings {
-  autoEnabled: boolean;
-  frequency: 'daily' | 'weekly' | 'monthly';
+export type BriefKind = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
+
+/** 一组自动简报设置 */
+export interface BriefSchedule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  frequency: BriefKind;
+  /** HH:mm */
   time: string;
   weekday: number;
   dayOfMonth: number;
+  /** yearly 使用：1-12 */
+  month: number;
+  /** custom 使用：每 N 天 */
+  days: number;
   scope: 'inbox' | 'all';
+  anchorAt: number;
   lastRun: Record<string, number>;
+}
+
+export interface BriefScheduleSettings {
+  /** 总开关 */
+  autoEnabled: boolean;
+  schedules: BriefSchedule[];
 }
 
 export interface AppSettings {
   ai: AISettings;
   brief: BriefScheduleSettings;
-  ui: { readingPane: boolean; listDensity: 'compact' | 'cozy'; showSnippet: boolean; pageSize: number };
+  ui: {
+    readingPane: boolean;
+    listDensity: 'compact' | 'cozy';
+    showSnippet: boolean;
+    pageSize: number;
+    /** 阅读窗格操作条显示的操作 id 列表 */
+    readerActions: string[];
+  };
+  backup: {
+    autoEnabled: boolean;
+    directory: string;
+    keep: number;
+    includeSecrets: boolean;
+  };
   sync: { days: number; limit: number };
   translate: { engine: 'auto' | 'llm' | 'builtin' };
-  update: { autoCheck: boolean; autoDownload: boolean };
+  update: {
+    autoCheck: boolean;
+    autoDownload: boolean;
+    /** 更新源：github 使用 GitHub Releases，custom 使用自定义地址（可填镜像前缀） */
+    source: 'github' | 'custom';
+    customUrl: string;
+  };
+}
+
+export interface BalanceInfo {
+  ok: boolean;
+  supported: boolean;
+  provider: string;
+  label?: string;
+  currency?: string;
+  total?: number;
+  used?: number;
+  granted?: number;
+  toppedUp?: number;
+  error?: string;
+  fetchedAt: number;
 }
 
 export interface UpdateState {
@@ -250,10 +300,43 @@ export interface TriageResult {
   labels: string[];
 }
 
+export interface BackupEntry {
+  name: string;
+  path: string;
+  size: number;
+  time: number;
+}
+
+export interface BackupOverview {
+  dataDir: string;
+  backupDir: string;
+  backups: BackupEntry[];
+  counts: { accounts: number; messages: number; briefs: number; todos: number };
+}
+
+export interface BackupInspection {
+  entries: number;
+  bytes: number;
+  valid: boolean;
+  error?: string;
+  manifest?: {
+    app: string;
+    version: string;
+    exportedAt: string;
+    dataDir: string;
+    includeSecrets: boolean;
+    counts: { accounts: number; messages: number; briefs: number; todos: number };
+  };
+}
+
 export interface AppInfo {
   version: string;
   platform: string;
   dataDir: string;
+  /** 数据目录是否为用户自定义位置 */
+  dataDirCustom?: boolean;
+  /** 默认数据目录，用于恢复默认时展示 */
+  defaultDataDir?: string;
   strongEncryption: boolean;
   mailPresets: {
     id: string;
@@ -284,7 +367,18 @@ export interface ComposeAssistParams {
 }
 
 export interface ZhimailApi {
-  app: { info: () => Promise<AppInfo> };
+  app: {
+    info: () => Promise<AppInfo>;
+    chooseDataDir: () => Promise<{
+      canceled: boolean;
+      dataDir?: string;
+      files?: number;
+      bytes?: number;
+      error?: string;
+    }>;
+    resetDataDir: () => Promise<{ dataDir: string }>;
+    relaunch: () => Promise<boolean>;
+  };
   accounts: {
     list: () => Promise<Account[]>;
     save: (input: AccountInput) => Promise<Account[]>;
@@ -327,6 +421,7 @@ export interface ZhimailApi {
   };
   ai: {
     test: (config: unknown) => Promise<{ ok: boolean; reply?: string; model?: string; error?: string }>;
+    balance: (force?: boolean) => Promise<BalanceInfo>;
     summarize: (messageId: string) => Promise<{ ok: boolean; markdown?: string; error?: string }>;
     summarizeThread: (threadId: string) => Promise<{ ok: boolean; markdown?: string; count?: number; error?: string }>;
     analyze: (params: RangeAnalysisParams) => Promise<{ ok: boolean; result?: RangeAnalysis; error?: string }>;
@@ -347,6 +442,12 @@ export interface ZhimailApi {
     get: (id: string) => Promise<Brief | undefined>;
     generate: (params: unknown) => Promise<{ ok: boolean; brief?: Brief; error?: string }>;
     remove: (id: string) => Promise<Brief[]>;
+    runSchedule: (scheduleId: string) => Promise<{
+      scheduleId: string;
+      scheduleName: string;
+      brief?: Brief;
+      error?: string;
+    }>;
     export: (payload: { id: string; format: 'md' | 'html' | 'docx' }) => Promise<{
       ok: boolean;
       path?: string;
@@ -366,6 +467,26 @@ export interface ZhimailApi {
     update: (patch: Record<string, unknown>) => Promise<AppSettings>;
   };
   demo: { reset: () => Promise<{ seeded: boolean; folders: Folder[] }> };
+  backup: {
+    overview: () => Promise<BackupOverview>;
+    export: (options?: { includeSecrets?: boolean }) => Promise<{
+      canceled: boolean;
+      path?: string;
+      files?: number;
+      bytes?: number;
+      error?: string;
+    }>;
+    inspect: () => Promise<{ canceled: boolean; path?: string; inspection?: BackupInspection }>;
+    import: (filePath: string) => Promise<{
+      ok: boolean;
+      restoredFiles?: number;
+      previousDataMovedTo?: string;
+      error?: string;
+    }>;
+    autoRun: () => Promise<{ created: boolean; path?: string; reason?: string; pruned?: number }>;
+    remove: (filePath: string) => Promise<{ ok: boolean; error?: string } & Partial<BackupOverview>>;
+    openDir: () => Promise<{ ok: boolean; dir?: string; error?: string }>;
+  };
   system: {
     openPath: (target: string) => Promise<{ ok: boolean; error?: string }>;
     revealFile: (target: string) => Promise<{ ok: boolean; error?: string }>;
@@ -394,6 +515,8 @@ declare global {
     zhimail: ZhimailApi;
     __zhimailDev?: {
       showMail?: () => void;
+      showSettings?: (tab?: string) => void;
+      maximizeAIPanel?: () => void;
       showAI?: () => void;
       showBriefs?: () => void;
       showTodos?: () => void;

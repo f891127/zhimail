@@ -96,7 +96,11 @@ export function AIAssistantPanel() {
   if (!aiPanelOpen) return null;
 
   return (
-    <div className="md-compact flex h-full w-[408px] shrink-0 flex-col border-l border-shell-line bg-[#fbfcfd] animate-slide-in-right">
+    <div
+      className={`md-compact flex h-full shrink-0 flex-col border-l border-shell-line bg-[#fbfcfd] animate-slide-in-right ${
+        store.aiPanelMaximized ? 'min-w-0 flex-1' : 'w-[408px]'
+      }`}
+    >
       <div className="flex h-[38px] shrink-0 items-center gap-1 border-b border-shell-line bg-white px-2">
         <Icon name="sparkles" size={14} className="text-brand-500" />
         <span className="text-xs font-semibold text-shell-text">AI 助手</span>
@@ -106,6 +110,15 @@ export function AIAssistantPanel() {
         <button
           type="button"
           className="ml-auto rounded p-1 text-shell-faint hover:bg-black/5 hover:text-shell-text"
+          title={store.aiPanelMaximized ? '还原面板' : '最大化面板（暂时隐藏其它区域）'}
+          onClick={() => store.toggleAIPanelMaximize()}
+        >
+          <Icon name={store.aiPanelMaximized ? 'minimize' : 'maximize'} size={13} />
+        </button>
+        <button
+          type="button"
+          className="rounded p-1 text-shell-faint hover:bg-black/5 hover:text-shell-text"
+          title="关闭"
           onClick={() => store.setAIPanel(false)}
         >
           <Icon name="close" size={13} />

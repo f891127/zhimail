@@ -5,6 +5,8 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { initUpdater, onUpdateState } from './services/updater';
 import { store } from './services/store';
+import { resolveDataDir } from './services/location';
+import { maybeAutoBackup } from './services/backup';
 import { registerIpcHandlers, setMainWindow, startScheduler } from './ipc';
 import { seedDemoData } from './services/demo';
 import { imapService } from './services/imap';
@@ -76,6 +78,11 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
   const outDir = path.join(process.cwd(), 'shots');
   fs.mkdirSync(outDir, { recursive: true });
   await new Promise((resolve) => setTimeout(resolve, 2600));
+
+  const onlyViews = (process.env.ZHIMAIL_SCREENSHOT_VIEWS ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 
   const views: { name: string; script: string; waitMs?: number }[] = [
     { name: '01-mail', script: 'window.__zhimailDev?.showMail?.()' },
@@ -151,9 +158,91 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
       })()`,
       waitMs: 5200,
     },
+    {
+      // 阅读窗格操作条配置（设置 → 界面）
+      name: '10-reader-actions',
+      script: `(() => {
+        const dialog = Array.from(document.querySelectorAll('div')).find((el) =>
+          (el.textContent || '').includes('本次更新内容'),
+        );
+        if (dialog) {
+          const btn = Array.from(dialog.querySelectorAll('button')).find(
+            (item) => (item.textContent || '').trim() === '关闭',
+          );
+          if (btn) btn.click();
+        }
+        window.__zhimailDev?.showSettings?.('ui');
+        return true;
+      })()`,
+      waitMs: 3000,
+    },
+    {
+      // 数据与备份（设置 → 数据与备份）
+      name: '11-data-backup',
+      script: `(() => {
+        const dialog = Array.from(document.querySelectorAll('div')).find((el) =>
+          (el.textContent || '').includes('本次更新内容'),
+        );
+        if (dialog) {
+          const btn = Array.from(dialog.querySelectorAll('button')).find(
+            (item) => (item.textContent || '').trim() === '关闭',
+          );
+          if (btn) btn.click();
+        }
+        window.__zhimailDev?.showSettings?.('data');
+        return true;
+      })()`,
+      waitMs: 3000,
+    },
+    {
+      // 自动简报多组排程
+      name: '12-brief-schedules',
+      script: `(() => {
+        const dialog = Array.from(document.querySelectorAll('div')).find((el) =>
+          (el.textContent || '').includes('本次更新内容'),
+        );
+        if (dialog) {
+          const closeBtn = Array.from(dialog.querySelectorAll('button')).find(
+            (item) => (item.textContent || '').trim() === '关闭',
+          );
+          if (closeBtn) closeBtn.click();
+        }
+        window.__zhimailDev?.showSettings?.('brief');
+        setTimeout(() => {
+          const btn = Array.from(document.querySelectorAll('button')).find((item) =>
+            (item.textContent || '').includes('恢复默认（日报'),
+          );
+          if (btn) btn.click();
+        }, 1500);
+        return true;
+      })()`,
+      waitMs: 4200,
+    },
+    {
+      // AI 助手最大化（其余区域暂时隐藏）
+      name: '13-ai-maximized',
+      script: `(() => {
+        const dialog = Array.from(document.querySelectorAll('div')).find((el) =>
+          (el.textContent || '').includes('本次更新内容'),
+        );
+        if (dialog) {
+          const closeBtn = Array.from(dialog.querySelectorAll('button')).find(
+            (item) => (item.textContent || '').trim() === '关闭',
+          );
+          if (closeBtn) closeBtn.click();
+        }
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        const dev = window.__zhimailDev;
+        dev?.showAI?.();
+        setTimeout(() => dev?.maximizeAIPanel?.(), 1200);
+        return true;
+      })()`,
+      waitMs: 7000,
+    },
   ];
 
   for (const view of views) {
+    if (onlyViews.length > 0 && !onlyViews.includes(view.name)) continue;
     try {
       await window.webContents.executeJavaScript(view.script);
     } catch (error) {
@@ -181,7 +270,8 @@ if (!gotLock) {
     nativeTheme.themeSource = 'light';
     app.setAppUserModelId('com.zhimail.desktop');
 
-    store.init(path.join(app.getPath('userData'), 'zhimail-data'));
+    // 数据目录可由用户在设置中修改，位置记录在 userData 下，启动时解析
+    store.init(resolveDataDir());
     const settings = store.getSettings();
     if (!settings.bootstrapped) {
       seedDemoData(false);
@@ -190,12 +280,28 @@ if (!gotLock) {
     registerIpcHandlers();
     mainWindow = createWindow();
     setMainWindow(mainWindow);
+    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      if (level >= 2) console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`);
+    });
+    mainWindow.webContents.on('render-process-gone', (_event, details) => {
+      console.log('[renderer] 进程异常退出：', details.reason);
+    });
 
     // 自动简报调度：仅当用户开启且已配置模型时运行
     if (store.getSettings().brief.autoEnabled) startScheduler();
 
     // 在线更新：初始化并转发状态到界面
     initUpdater();
+
+  // 每天首次启动自动备份一次（未开启时内部会直接返回）
+  setTimeout(() => {
+    try {
+      const outcome = maybeAutoBackup();
+      if (outcome.created) console.log('[backup] 自动备份完成:', outcome.path);
+    } catch (error) {
+      console.warn('[backup] 自动备份失败', (error as Error).message);
+    }
+  }, 6000);
     onUpdateState((state) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('update:status', state);

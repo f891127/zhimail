@@ -4,6 +4,17 @@ import { BrowserWindow, dialog, ipcMain, shell, app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { store } from './services/store';
+import { fetchBalance, resetBalanceCache } from './services/ai/balance';
+import { defaultDataDir, isCustomDataDir, migrateData, saveDataDir } from './services/location';
+import {
+  backupFileName,
+  createBackup,
+  getBackupOverview,
+  inspectBackup,
+  maybeAutoBackup,
+  resolveBackupDir,
+  restoreBackup,
+} from './services/backup';
 import {
   listAccounts,
   removeAccount,
@@ -19,6 +30,13 @@ import { generateBrief, exportBrief, listBriefs, getBrief, removeBrief, BRIEF_GR
 import { createTodoItems, listTodos, removeTodo, toggleTodo, updateTodo, clearCompleted, todoStats } from './services/todo';
 import { seedDemoData, DEMO_ACCOUNT_ID } from './services/demo';
 import { briefScheduler } from './services/scheduler';
+import {
+  applyUpdateFeed,
+  checkForUpdates,
+  downloadUpdate,
+  getUpdateState,
+  quitAndInstall,
+} from './services/updater';
 import {
   analyzeRange,
   composeAssist,
@@ -127,6 +145,8 @@ export function registerIpcHandlers(): void {
     version: app.getVersion(),
     platform: process.platform,
     dataDir: store.root,
+    dataDirCustom: isCustomDataDir(),
+    defaultDataDir: defaultDataDir(),
     strongEncryption: isStrongEncryptionAvailable(),
     mailPresets: MAIL_PRESETS,
     aiProviders: AI_PROVIDERS,
@@ -389,6 +409,9 @@ export function registerIpcHandlers(): void {
 
   /* ------------------------------ AI ------------------------------ */
 
+  // 模型账户余额（状态栏展示）
+  ipcMain.handle('ai/balance', (_event, force?: boolean) => fetchBalance(Boolean(force)));
+
   ipcMain.handle('ai/test', async (_event, config: Partial<AISettings> & { apiKey?: string }) => {
     try {
       const result = await testAIConnection(config);
@@ -494,6 +517,9 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('brief/remove', (_event, id: string) => removeBrief(id));
 
+  // 立即生成某一组自动简报
+  ipcMain.handle('brief/runSchedule', async (_event, scheduleId: string) => briefScheduler.runNow(scheduleId));
+
   ipcMain.handle('brief/export', async (_event, payload: { id: string; format: 'md' | 'html' | 'docx' }) => {
     try {
       const result = await exportBrief(payload.id, payload.format);
@@ -533,8 +559,11 @@ export function registerIpcHandlers(): void {
       store.setAIKey(aiApiKey.trim() || undefined);
     }
     const updated = store.updateSettings(rest);
-    if (rest.brief?.autoEnabled !== undefined) {
-      if (rest.brief.autoEnabled) startScheduler();
+    if (rest.update) applyUpdateFeed();
+    if (rest.ai) resetBalanceCache();
+    if (rest.brief) {
+      // 排程或总开关变化后按最新设置重启调度
+      if (rest.brief.autoEnabled ?? updated.brief.autoEnabled) startScheduler();
       else briefScheduler.stop();
     }
     return { ...updated, ai: { ...updated.ai, hasApiKey: Boolean(store.getAIKey()) } };
@@ -568,6 +597,102 @@ export function registerIpcHandlers(): void {
     return result.canceled ? [] : result.filePaths;
   });
 
+  /* ---------------------- 数据存储位置 ---------------------- */
+
+  ipcMain.handle('app/chooseDataDir', async () => {
+    const result = await dialog.showOpenDialog(mainWindow ?? undefined!, {
+      title: '选择数据存储位置',
+      buttonLabel: '使用此目录',
+      properties: ['openDirectory', 'createDirectory'],
+      defaultPath: store.root,
+    });
+    const target = result.filePaths[0];
+    if (result.canceled || !target) return { canceled: true };
+    try {
+      // 先复制现有数据，再写入新位置；原目录保留，确认无误后可自行删除
+      store.flush();
+      const migrated = migrateData(store.root, target);
+      saveDataDir(target);
+      return { canceled: false, dataDir: target, files: migrated.files, bytes: migrated.bytes };
+    } catch (error) {
+      return { canceled: false, error: (error as Error).message };
+    }
+  });
+
+  /* ---------------------- 备份与恢复 ---------------------- */
+
+  ipcMain.handle('backup/overview', () => getBackupOverview());
+
+  ipcMain.handle('backup/export', async (_event, options?: { includeSecrets?: boolean }) => {
+    const dir = resolveBackupDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const result = await dialog.showSaveDialog(mainWindow ?? undefined!, {
+      title: '导出数据备份',
+      defaultPath: path.join(dir, backupFileName()),
+      filters: [{ name: '知邮备份包', extensions: ['zip'] }],
+    });
+    if (result.canceled || !result.filePath) return { canceled: true };
+    try {
+      const created = createBackup(result.filePath, options);
+      return { canceled: false, ...created };
+    } catch (error) {
+      return { canceled: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('backup/inspect', async () => {
+    const result = await dialog.showOpenDialog(mainWindow ?? undefined!, {
+      title: '选择要导入的备份包',
+      properties: ['openFile'],
+      filters: [{ name: '知邮备份包', extensions: ['zip'] }],
+    });
+    const file = result.filePaths[0];
+    if (result.canceled || !file) return { canceled: true };
+    return { canceled: false, path: file, inspection: inspectBackup(file) };
+  });
+
+  ipcMain.handle('backup/import', async (_event, filePath: string) => {
+    try {
+      const restored = restoreBackup(filePath);
+      return { ok: true, ...restored };
+    } catch (error) {
+      return { ok: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('backup/autoRun', () => maybeAutoBackup());
+
+  ipcMain.handle('backup/remove', (_event, filePath: string) => {
+    const dir = resolveBackupDir();
+    const target = path.resolve(filePath);
+    // 只允许删除备份目录内的文件
+    if (!target.startsWith(path.resolve(dir))) return { ok: false, error: '只能删除备份目录内的文件' };
+    try {
+      fs.rmSync(target, { force: true });
+      return { ok: true, ...getBackupOverview() };
+    } catch (error) {
+      return { ok: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('backup/openDir', async () => {
+    const dir = resolveBackupDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const error = await shell.openPath(dir);
+    return error ? { ok: false, error } : { ok: true, dir };
+  });
+
+  ipcMain.handle('app/resetDataDir', () => {
+    saveDataDir(null);
+    return { dataDir: defaultDataDir() };
+  });
+
+  ipcMain.handle('app/relaunch', () => {
+    app.relaunch();
+    app.exit(0);
+    return true;
+  });
+
   ipcMain.handle('shell/openPath', async (_event, target: string) => {
     if (!fs.existsSync(target)) return { ok: false, error: '文件不存在' };
     const error = await shell.openPath(target);
@@ -596,4 +721,3 @@ export function startScheduler(): void {
     onError: (message) => emit('brief:error', { message }),
   });
 }
-import { checkForUpdates, downloadUpdate, getUpdateState, quitAndInstall } from './services/updater';

@@ -273,7 +273,7 @@ export interface TodoItem extends TodoDraft {
 
 /* ------------------------------- 简报 ------------------------------- */
 
-export type BriefKind = 'daily' | 'weekly' | 'monthly' | 'custom';
+export type BriefKind = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
 
 export interface Brief {
   id: string;
@@ -302,18 +302,42 @@ export interface BriefGenerateParams extends RangeAnalysisParams {
 
 /* ------------------------------- 设置 ------------------------------- */
 
-export interface BriefScheduleSettings {
-  autoEnabled: boolean;
-  frequency: 'daily' | 'weekly' | 'monthly';
+/** 一组自动简报设置，可同时配置日报、周报、月报、年报与自定义周期 */
+export interface BriefSchedule {
+  id: string;
+  /** 显示名，可自定义，如「客户项目周报」 */
+  name: string;
+  enabled: boolean;
+  frequency: BriefKind;
   /** HH:mm */
   time: string;
   /** 1=周一 … 7=周日，weekly 使用 */
   weekday: number;
-  /** monthly 使用 */
+  /** monthly / yearly 使用 */
   dayOfMonth: number;
+  /** yearly 使用：1-12 */
+  month: number;
+  /** custom 使用：每 N 天 */
+  days: number;
   scope: 'inbox' | 'all';
+  /** custom 周期锚点时间戳（首次创建时记录），0 表示按当年 1 月 1 日起算 */
+  anchorAt: number;
   /** 各周期上次执行时间戳 */
   lastRun: Record<string, number>;
+}
+
+export interface BriefScheduleSettings {
+  /** 自动简报总开关 */
+  autoEnabled: boolean;
+  /** 多组简报设置 */
+  schedules: BriefSchedule[];
+  /* 以下为旧版单组字段，仅用于迁移 */
+  frequency?: 'daily' | 'weekly' | 'monthly';
+  time?: string;
+  weekday?: number;
+  dayOfMonth?: number;
+  scope?: 'inbox' | 'all';
+  lastRun?: Record<string, number>;
 }
 
 export interface UISettings {
@@ -321,6 +345,20 @@ export interface UISettings {
   listDensity: 'compact' | 'cozy';
   showSnippet: boolean;
   pageSize: number;
+  /** 阅读窗格操作条显示的操作 id 列表，顺序即展示顺序 */
+  readerActions: string[];
+}
+
+/** 备份设置 */
+export interface BackupSettings {
+  /** 启动时自动备份（每天首次启动执行一次） */
+  autoEnabled: boolean;
+  /** 备份目录；留空表示使用默认目录（数据目录同级的 zhimail-backups） */
+  directory: string;
+  /** 保留最近多少份自动备份 */
+  keep: number;
+  /** 备份中是否包含凭据（邮箱密码与 AI Key，仍为加密存储） */
+  includeSecrets: boolean;
 }
 
 export interface AppSettings {
@@ -330,8 +368,17 @@ export interface AppSettings {
   sync: { days: number; limit: number };
   /** 翻译引擎：auto 优先大模型，builtin 使用内置免费引擎 */
   translate: { engine: 'auto' | 'llm' | 'builtin' };
+  /** 备份与恢复 */
+  backup: BackupSettings;
   /** 在线更新（GitHub Releases） */
-  update: { autoCheck: boolean; autoDownload: boolean };
+  update: {
+    autoCheck: boolean;
+    autoDownload: boolean;
+    /** 更新源：github 走 GitHub Releases；custom 走自定义地址（可填镜像前缀） */
+    source: 'github' | 'custom';
+    /** 自定义更新源基础地址，需能访问到 latest.yml 与其列出的安装包 */
+    customUrl: string;
+  };
   /** 是否已完成首次初始化（用于播种演示数据） */
   bootstrapped?: boolean;
 }

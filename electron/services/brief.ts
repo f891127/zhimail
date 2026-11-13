@@ -19,6 +19,7 @@ export const BRIEF_GROUPS: { id: string; name: string; kind: BriefKind }[] = [
   { id: 'briefs/daily', name: '日报', kind: 'daily' },
   { id: 'briefs/weekly', name: '周报', kind: 'weekly' },
   { id: 'briefs/monthly', name: '月报', kind: 'monthly' },
+  { id: 'briefs/yearly', name: '年报', kind: 'yearly' },
   { id: 'briefs/custom', name: '自定义简报', kind: 'custom' },
 ];
 
@@ -40,6 +41,8 @@ function defaultTitle(kind: BriefKind, start: number, end: number): string {
       return `邮件周报 · ${formatDate(start)} ~ ${formatDate(end)}`;
     case 'monthly':
       return `邮件月报 · ${formatDate(start)} ~ ${formatDate(end)}`;
+    case 'yearly':
+      return `邮件年报 · ${formatDate(start)} ~ ${formatDate(end)}`;
     default:
       return `邮件简报 · ${formatDate(start)} ~ ${formatDate(end)}`;
   }

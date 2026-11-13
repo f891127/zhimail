@@ -22,6 +22,7 @@ import type {
   TodoItem,
   TodoStats,
   TriageResult,
+  BalanceInfo,
 } from '@/types/zhimail';
 import type { UpdateState } from '@/types/zhimail';
 
@@ -123,7 +124,12 @@ interface State {
   changelogOpen: boolean;
   changelogAuto: boolean;
   changelogHighlight: string | null;
-  settingsTab: 'account' | 'ai' | 'brief' | 'about';
+  settingsTab: 'account' | 'ai' | 'ui' | 'brief' | 'data' | 'update' | 'about';
+  /** AI 助手面板是否最大化（最大化时其它区域暂时隐藏） */
+  aiPanelMaximized: boolean;
+  /** 模型账户余额（状态栏展示） */
+  balance: BalanceInfo | null;
+  balanceLoading: boolean;
   compose: ComposeState;
 
   /* 动作 */
@@ -192,6 +198,8 @@ interface State {
   dismissToast: (id: string) => void;
   setSyncProgress: (progress: SyncProgress | null) => void;
   openSettings: (tab?: State['settingsTab']) => void;
+  toggleAIPanelMaximize: () => void;
+  refreshBalance: (force?: boolean) => Promise<void>;
   openChangelog: (options?: { auto?: boolean; version?: string | null }) => void;
   closeChangelog: () => void;
   closeSettings: () => void;
@@ -282,11 +290,16 @@ export const useAppStore = create<State>((set, get) => ({
   changelogAuto: false,
   changelogHighlight: null,
   settingsTab: 'account',
+  aiPanelMaximized: false,
+  balance: null,
+  balanceLoading: false,
   compose: emptyCompose,
 
   /* ------------------------------ 初始化 ------------------------------ */
 
   init: async () => {
+    // 状态栏余额：配置了 API Key 时后台拉取，不阻塞界面
+    void get().refreshBalance();
     const [info, accounts, folders, settings] = await Promise.all([
       api.app.info(),
       api.accounts.list(),
@@ -367,7 +380,9 @@ export const useAppStore = create<State>((set, get) => ({
         if (first) set({ selectedBriefId: first.id });
       },
       showTodos: () => set({ view: 'todos', aiPanelOpen: false }),
-      showSettings: () => set({ settingsOpen: true, settingsTab: 'ai' }),
+      showSettings: (tab?: string) =>
+        set({ settingsOpen: true, settingsTab: (tab as State['settingsTab']) ?? 'ai' }),
+      maximizeAIPanel: () => set({ aiPanelOpen: true, aiPanelMaximized: true }),
     };
   },
 
@@ -614,7 +629,13 @@ export const useAppStore = create<State>((set, get) => ({
   /* ------------------------------ 界面状态 ------------------------------ */
 
   setView: (view) => set({ view }),
-  setAIPanel: (open, tab) => set({ aiPanelOpen: open, aiTab: tab ?? get().aiTab }),
+  setAIPanel: (open, tab) =>
+    set({
+      aiPanelOpen: open,
+      aiTab: tab ?? get().aiTab,
+      // 关闭面板时同时退出最大化，避免其它区域一直被隐藏
+      aiPanelMaximized: open ? get().aiPanelMaximized : false,
+    }),
   setAIOutput: (key, value) => set((state) => ({ aiOutputs: { ...state.aiOutputs, [key]: value } })),
 
   /* ------------------------------ AI 动作 ------------------------------ */
@@ -1008,6 +1029,31 @@ export const useAppStore = create<State>((set, get) => ({
   setSyncProgress: (progress) => set({ syncProgress: progress }),
 
   openSettings: (tab) => set({ settingsOpen: true, settingsTab: tab ?? 'account' }),
+  toggleAIPanelMaximize: () =>
+    set((state) => ({ aiPanelMaximized: !state.aiPanelMaximized, aiPanelOpen: true })),
+
+  refreshBalance: async (force = false) => {
+    if (!get().settings?.ai.hasApiKey) {
+      set({ balance: null });
+      return;
+    }
+    set({ balanceLoading: true });
+    try {
+      set({ balance: await api.ai.balance(force) });
+    } catch (error) {
+      set({
+        balance: {
+          ok: false,
+          supported: false,
+          provider: get().settings?.ai.provider ?? '',
+          error: (error as Error).message,
+          fetchedAt: Date.now(),
+        },
+      });
+    } finally {
+      set({ balanceLoading: false });
+    }
+  },
   openChangelog: (options) =>
     set({
       changelogOpen: true,
