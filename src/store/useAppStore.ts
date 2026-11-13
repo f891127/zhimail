@@ -28,7 +28,7 @@ import type {
 import type { UpdateState } from '@/types/zhimail';
 
 export type MainView = 'mail' | 'briefs' | 'todos' | 'analysis';
-export type AITab = 'analysis' | 'brief' | 'assist' | 'todo';
+export type AITab = 'analysis' | 'summary' | 'brief' | 'assist' | 'todo';
 
 export interface Toast {
   id: string;
@@ -732,7 +732,8 @@ export const useAppStore = create<State>((set, get) => ({
   runSummarize: async (messageId) => {
     const id = messageId ?? get().selectedMessageId;
     if (!id) return;
-    set({ aiBusy: true, aiProgress: '正在读取邮件并生成摘要…', aiPanelOpen: true, aiTab: 'analysis' });
+    // 摘要只针对当前这封邮件，切到「邮件摘要」页签，不再弹出时间范围选择
+    set({ aiBusy: true, aiProgress: '正在读取当前邮件并生成摘要…', aiPanelOpen: true, aiTab: 'summary' });
     try {
       const result = await api.ai.summarize(id);
       if (result.ok && result.markdown) {
@@ -936,7 +937,8 @@ export const useAppStore = create<State>((set, get) => ({
   },
 
   runTriage: async (messageId) => {
-    set({ aiBusy: true, aiProgress: '正在判断重要度…', aiPanelOpen: true, aiTab: 'assist' });
+    // 重要度结果直接显示在阅读窗格的提示条里，不需要切换侧栏页签
+    set({ aiBusy: true, aiProgress: '正在判断重要度…' });
     try {
       const result = await api.ai.triage(messageId);
       if (result.ok && result.result) {

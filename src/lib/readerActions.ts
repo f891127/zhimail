@@ -42,7 +42,6 @@ export const READER_ACTIONS: ReaderActionDef[] = [
     title: '生成整个会话串的摘要',
     group: 'AI 能力',
     brand: true,
-    iconOnly: true,
   },
   {
     id: 'replies',
@@ -51,7 +50,6 @@ export const READER_ACTIONS: ReaderActionDef[] = [
     title: '一键生成 3 条回复草稿',
     group: 'AI 能力',
     brand: true,
-    iconOnly: true,
   },
   {
     id: 'triage',
@@ -59,7 +57,6 @@ export const READER_ACTIONS: ReaderActionDef[] = [
     icon: 'shield',
     title: '判断重要度与紧急度',
     group: 'AI 能力',
-    iconOnly: true,
   },
   { id: 'translateZh', label: '译中', icon: 'translate', title: '一键翻译为中文', group: '翻译' },
   { id: 'translateEn', label: '译英', icon: 'translate', title: '一键翻译为英文', group: '翻译' },
@@ -69,7 +66,6 @@ export const READER_ACTIONS: ReaderActionDef[] = [
     icon: 'checklist',
     title: '从本邮件提取待办事项',
     group: '待办',
-    iconOnly: true,
   },
 ];
 

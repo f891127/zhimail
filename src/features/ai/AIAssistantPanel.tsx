@@ -10,6 +10,7 @@ import type { RangeAnalysisParams } from '@/types/zhimail';
 
 const TABS: { id: AITab; label: string; icon: 'chart' | 'document' | 'send' | 'checklist' }[] = [
   { id: 'analysis', label: '汇总分析', icon: 'chart' },
+  { id: 'summary', label: '邮件摘要', icon: 'document' },
   { id: 'brief', label: '简报', icon: 'document' },
   { id: 'assist', label: '写作·回复', icon: 'send' },
   { id: 'todo', label: '待办', icon: 'checklist' },
@@ -125,13 +126,13 @@ export function AIAssistantPanel() {
         </button>
       </div>
 
-      <div className="flex shrink-0 border-b border-shell-line bg-white">
+      <div className="flex shrink-0 overflow-x-auto border-b border-shell-line bg-white">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => store.setAIPanel(true, tab.id)}
-            className={`flex flex-1 items-center justify-center gap-1 border-b-2 py-1.5 text-[11px] transition-colors duration-120 ${
+            className={`flex shrink-0 items-center justify-center gap-1 whitespace-nowrap border-b-2 px-2.5 py-1.5 text-[11px] transition-colors duration-120 ${
               aiTab === tab.id
                 ? 'border-brand-500 font-medium text-brand-700'
                 : 'border-transparent text-shell-sub hover:text-shell-text'
@@ -302,6 +303,55 @@ export function AIAssistantPanel() {
             {!analysis && !aiBusy && (
               <div className="rounded border border-dashed border-shell-line bg-white/60 px-3 py-4 text-[11px] leading-5 text-shell-faint">
                 选择时间范围与分析范围后点击「开始汇总分析」。邮件较多时会自动分批压缩再汇总，并在结果中标注实际纳入的邮件数量。
+              </div>
+            )}
+          </div>
+        )}
+
+        {aiTab === 'summary' && (
+          <div className="space-y-2.5">
+            <div className="rounded border border-shell-lineSoft bg-shell-bg/60 px-2.5 py-2 text-[11px] leading-4 text-shell-sub">
+              {selectedMessage ? (
+                <>
+                  仅分析当前邮件：
+                  <b className="text-shell-text">{selectedMessage.subject || '(无主题)'}</b>
+                  <div className="mt-0.5 text-[10px] text-shell-faint">
+                    {selectedMessage.from?.[0]?.name || selectedMessage.from?.[0]?.address || '未知发件人'} ·{' '}
+                    {new Date(selectedMessage.date).toLocaleString('zh-CN', { hour12: false })}
+                  </div>
+                </>
+              ) : (
+                '请先在列表中选中一封邮件，再点击「摘要当前邮件」。'
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                className="primary-btn"
+                disabled={!selectedMessage || aiBusy}
+                onClick={() => void store.runSummarize(selectedMessage?.id)}
+              >
+                <Icon name="sparkles" size={12} />
+                {aiBusy ? '正在生成…' : '摘要当前邮件'}
+              </button>
+              {aiOutputs.message?.markdown && (
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={() => void copyText(aiOutputs.message?.markdown ?? '')}
+                >
+                  <Icon name="document" size={12} />
+                  复制摘要
+                </button>
+              )}
+            </div>
+            {aiOutputs.message?.markdown ? (
+              <div className="markdown-body text-[12px] leading-5 text-shell-text">
+                <div dangerouslySetInnerHTML={{ __html: renderMarkdown(aiOutputs.message.markdown) }} />
+              </div>
+            ) : (
+              <div className="rounded border border-dashed border-shell-lineSoft px-2.5 py-3 text-center text-[11px] text-shell-faint">
+                还没有摘要。点击上方按钮，AI 会读这封邮件的正文，给出一句话结论、要点与需要跟进的事项。
               </div>
             )}
           </div>

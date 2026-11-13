@@ -5,6 +5,7 @@
 
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
+import type { ParsedMail } from 'mailparser';
 import type { AddressObject } from 'mailparser';
 import { decryptSecret } from './crypto';
 import { assignThreadIds } from './thread';
@@ -39,6 +40,99 @@ function toAddresses(input: unknown): MailAddress[] {
     if (entry.address) result.push({ name: entry.name || undefined, address: entry.address });
   }
   return result;
+}
+
+
+/** 文本“像不像正常中文”的粗略打分：用于在多种解码结果中挑最合理的一个 */
+function textScore(text: string): number {
+  if (!text) return 0;
+  let score = 0;
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code < 128) score += 1;
+    else if (code >= 0x4e00 && code <= 0x9fff) score += 3; // 常用汉字
+    else if (code >= 0x3000 && code <= 0x303f) score += 2; // 中文标点
+    else if (code >= 0xff00 && code <= 0xffef) score += 1; // 全角符号
+    else if (code === 0xfffd || code === 0x25c6 || code === 0x25a1 || code === 0x25a0) score -= 8;
+    else if (code >= 0x3400 && code <= 0x4dbf) score -= 4; // 生僻扩展 A，常见于错位解码
+    else if (code >= 0xf900 && code <= 0xfaff) score -= 4; // 兼容汉字
+    else if (code >= 0xe000 && code <= 0xf8ff) score -= 6; // 私用区
+    else score -= 1;
+  }
+  return score;
+}
+
+/** 判定解析结果是否明显乱码（大量生僻字 / 替换符 / ◆） */
+function looksBroken(text: string): boolean {
+  if (!text || text.length < 8) return false;
+  return textScore(text) < text.length * 0.2;
+}
+
+/** 正文里是否含非 ASCII 字节，且整段原文能无损按 UTF-8 往返（说明它就是 UTF-8 编码的） */
+function isLikelyUtf8(source: Buffer): boolean {
+  if (!/[\x80-\xff]/.test(source.toString('latin1'))) return false;
+  const decoded = source.toString('utf8');
+  if (decoded.includes('\uFFFD')) return false;
+  return Buffer.byteLength(decoded, 'utf8') === source.length;
+}
+
+/** 读取头部里声明的 charset */
+function declaredCharset(source: Buffer): string {
+  const head = source.subarray(0, Math.min(source.length, 8192)).toString('latin1');
+  const match = /charset\s*=\s*"?([\w.\-]+)"?/i.exec(head);
+  return (match?.[1] ?? '').toLowerCase();
+}
+
+/** 把邮件头里的 charset 声明改成 utf-8，用于纠正「声明 gb2312、实际是 UTF-8」的邮件 */
+function forceUtf8Source(source: Buffer): Buffer {
+  const crlf = source.indexOf('\r\n\r\n');
+  const lf = source.indexOf('\n\n');
+  const index = crlf >= 0 ? crlf : lf;
+  const separator = crlf >= 0 ? '\r\n\r\n' : '\n\n';
+  if (index < 0) return source;
+  const headers = source.subarray(0, index).toString('latin1');
+  if (!/charset\s*=/i.test(headers)) return source;
+  const fixed = headers.replace(/charset\s*=\s*"?[\w.\-]+"?/gi, 'charset="utf-8"');
+  return Buffer.concat([
+    Buffer.from(fixed, 'latin1'),
+    Buffer.from(separator, 'latin1'),
+    source.subarray(index + separator.length),
+  ]);
+}
+
+/**
+ * 解析邮件原文。
+ * 中文企业邮箱（企业微信 / Exmail 等）常见「正文实际是 UTF-8，但头部声明 gb2312/gbk」，
+ * 直接解析会得到生僻字（界面上显示成 ◆）或整段错位的中文。
+ * 因此：先按声明解析；若原文本身就是合法 UTF-8，或解析结果明显异常，则强制按 UTF-8 再解析一次并择优。
+ */
+export async function parseMessageSource(source: Buffer | string): Promise<ParsedMail> {
+  const buffer = Buffer.isBuffer(source) ? source : Buffer.from(source, 'binary');
+  const parsed = await simpleParser(buffer);
+
+  const charset = declaredCharset(buffer);
+  if (charset === 'utf-8' || charset === 'utf8') return parsed;
+
+  const plain = parsed.text ?? '';
+  const htmlText = typeof parsed.html === 'string' ? parsed.html.replace(/<[^>]+>/g, ' ') : '';
+  const broken = looksBroken(plain + htmlText);
+  // 原文是合法 UTF-8 却声明成别的编码，是中文企业邮件的典型问题，直接按 UTF-8 重解析
+  const utf8Source = isLikelyUtf8(buffer);
+  if (!broken && !utf8Source) return parsed;
+
+  try {
+    const retried = await simpleParser(forceUtf8Source(buffer));
+    const retriedPlain = retried.text ?? '';
+    const retriedHtml = typeof retried.html === 'string' ? retried.html.replace(/<[^>]+>/g, ' ') : '';
+    const better = textScore(retriedPlain + retriedHtml) >= textScore(plain + htmlText);
+    if (better) {
+      parsed.text = retried.text;
+      if (retried.html) parsed.html = retried.html;
+    }
+  } catch {
+    /* 纠正失败时保留原结果 */
+  }
+  return parsed;
 }
 
 function makeSnippet(text: string | undefined, html: string | undefined): string {
@@ -427,7 +521,7 @@ export class ImapService {
     message: any,
   ): Promise<MessageMeta | undefined> {
     if (!message.source) return this.persistHeadOnly(account, folder, message);
-    const parsed = await simpleParser(message.source);
+    const parsed = await parseMessageSource(message.source);
     const attachments: AttachmentMeta[] = (parsed.attachments ?? []).map((attachment, index) => ({
       index,
       filename: attachment.filename || `附件-${index + 1}`,
@@ -501,7 +595,7 @@ export class ImapService {
       try {
         const message = await client.fetchOne(String(uid), { source: true }, { uid: true });
         if (!message || !message.source) return undefined;
-        const parsed = await simpleParser(message.source);
+        const parsed = await parseMessageSource(message.source);
         const attachments: AttachmentMeta[] = (parsed.attachments ?? []).map(
           (attachment, index) => ({
             index,
