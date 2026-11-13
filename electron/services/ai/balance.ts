@@ -337,3 +337,114 @@ export async function fetchBalance(force = false): Promise<BalanceInfo> {
 export function resetBalanceCache(): void {
   cache = null;
 }
+
+export interface BalanceTestStep {
+  url: string;
+  ok: boolean;
+  status?: number;
+  message: string;
+}
+
+export interface BalanceTestResult {
+  ok: boolean;
+  provider: string;
+  label?: string;
+  hasKey: boolean;
+  baseUrl: string;
+  steps: BalanceTestStep[];
+  message: string;
+}
+
+/**
+ * 余额查询自检：把试过的每个地址与结果都列出来，方便判断是 Key 无效、地址不对，还是服务商不提供余额接口。
+ */
+export async function testBalance(): Promise<BalanceTestResult> {
+  const settings = store.getSettings().ai;
+  const apiKey = store.getAIKey();
+  const baseUrl = (settings.baseUrl ?? '').trim().replace(/\/+$/, '');
+  const steps: BalanceTestStep[] = [];
+  const result: BalanceTestResult = {
+    ok: false,
+    provider: settings.provider,
+    hasKey: Boolean(apiKey),
+    baseUrl,
+    steps,
+    message: '',
+  };
+  if (!apiKey) {
+    result.message = '尚未保存 API Key：请先填写并点击「保存 AI 设置」';
+    return result;
+  }
+  if (!baseUrl) {
+    result.message = '尚未填写 Base URL';
+    return result;
+  }
+
+  const host = (() => {
+    try {
+      return new URL(baseUrl).host;
+    } catch {
+      return baseUrl;
+    }
+  })();
+  const preset =
+    PRESET_BALANCE[settings.provider] ??
+    Object.entries(PRESET_BALANCE).find(([key]) => host.includes(key))?.[1];
+
+  const roots = [baseUrl];
+  if (preset) {
+    try {
+      const official = new URL(preset.url);
+      const officialRoot = `${official.origin}${official.pathname.split('/').slice(0, -1).join('/')}`;
+      if (!roots.includes(officialRoot)) roots.push(officialRoot);
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  for (const root of roots) {
+    for (const endpoint of BALANCE_ENDPOINTS) {
+      const url = `${root}/${endpoint.path}`;
+      try {
+        const { status, data } = await getJson(url, apiKey);
+        if (status >= 400) {
+          steps.push({ url, ok: false, status, message: `HTTP ${status}` });
+          continue;
+        }
+        const parsed = endpoint.parse(data);
+        if (!parsed || parsed.total === undefined) {
+          steps.push({ url, ok: false, status, message: '接口有响应，但未找到余额字段' });
+          continue;
+        }
+        const currency = parsed.currency ?? 'CNY';
+        const label = formatAmount(parsed.total, currency);
+        steps.push({ url, ok: true, status, message: `解析成功：${label}` });
+        result.ok = true;
+        result.label = label;
+        result.provider = preset?.name ?? settings.provider;
+        result.message = `查询成功，当前余额 ${label}`;
+        cache = {
+          at: Date.now(),
+          value: {
+            ok: true,
+            supported: true,
+            provider: result.provider,
+            currency,
+            total: parsed.total,
+            granted: parsed.granted,
+            toppedUp: parsed.toppedUp,
+            used: parsed.used,
+            label,
+            fetchedAt: Date.now(),
+          },
+        };
+        return result;
+      } catch (error) {
+        steps.push({ url, ok: false, message: String((error as Error).message ?? error).slice(0, 160) });
+      }
+    }
+  }
+
+  result.message = '没有可用的余额接口。部分服务商（或第三方中转）不提供余额查询，这不影响正常对话使用。';
+  return result;
+}

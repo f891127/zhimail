@@ -237,6 +237,9 @@ export function SettingsDialog() {
   const [tab, setTab] = useState<TabId>('account');
   const [form, setForm] = useState<AccountForm>(emptyForm);
   const [testResult, setTestResult] = useState<{ imap: { ok: boolean; message: string }; smtp: { ok: boolean; message: string } } | null>(null);
+  /** 余额查询自检结果 */
+  const [balanceTest, setBalanceTest] = useState<Awaited<ReturnType<typeof api.ai.testBalance>> | null>(null);
+  const [balanceTesting, setBalanceTesting] = useState(false);
   const [testing, setTesting] = useState(false);
 
   // AI 表单
@@ -445,6 +448,19 @@ export function SettingsDialog() {
     if (index < 0 || target < 0 || target >= list.length) return;
     [list[index], list[target]] = [list[target], list[index]];
     await store.updateSettings({ ui: { ...settings.ui, readerActions: list } });
+  };
+
+  /** 测试余额查询：把每个尝试过的地址与返回都列出来 */
+  const runBalanceTest = async () => {
+    setBalanceTesting(true);
+    setBalanceTest(null);
+    try {
+      const result = await api.ai.testBalance();
+      setBalanceTest(result);
+      if (result.ok) await store.refreshBalance(true);
+    } finally {
+      setBalanceTesting(false);
+    }
   };
 
   const saveUISettings = async (patch: Partial<AppSettings['ui']>, hint = '设置已保存并即时生效') => {
@@ -859,9 +875,19 @@ export function SettingsDialog() {
                   </p>
                 </div>
 
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <button type="button" className="ghost-btn" disabled={aiTesting} onClick={() => void testAI()}>
                     {aiTesting ? '测试中…' : '测试连接'}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    disabled={balanceTesting}
+                    onClick={() => void runBalanceTest()}
+                    title="按当前 Base URL 与 API Key 逐个试探余额接口，并列出每个地址的返回"
+                  >
+                    <Icon name="chart" size={12} />
+                    {balanceTesting ? '查询中…' : '测试余额查询'}
                   </button>
                   <button type="button" className="primary-btn" onClick={() => void saveAI()}>
                     保存 AI 设置
@@ -870,6 +896,34 @@ export function SettingsDialog() {
                     兼容 OpenAI Chat Completions 协议的服务均可接入
                   </span>
                 </div>
+
+                {balanceTest && (
+                  <div className="rounded border border-shell-lineSoft bg-[#fafbfc] px-2.5 py-2 text-[11px] leading-4">
+                    <div className={balanceTest.ok ? 'font-medium text-emerald-700' : 'font-medium text-amber-700'}>
+                      {balanceTest.ok ? `余额 ${balanceTest.label}` : '未查询到余额'}
+                      <span className="ml-1 font-normal text-shell-faint">（{balanceTest.provider}）</span>
+                    </div>
+                    <div className="mt-1 text-shell-sub">{balanceTest.message}</div>
+                    {balanceTest.steps.length > 0 && (
+                      <div className="mt-1.5 space-y-0.5">
+                        {balanceTest.steps.map((step) => (
+                          <div key={step.url} className="flex items-start gap-1.5 text-[10px] leading-4">
+                            <span className={step.ok ? 'text-emerald-600' : 'text-rose-500'}>
+                              {step.ok ? '✓' : '✕'}
+                            </span>
+                            <span className="min-w-0 flex-1 break-all text-shell-sub">{step.url}</span>
+                            <span className={step.ok ? 'text-emerald-700' : 'text-shell-faint'}>
+                              {step.message}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {!balanceTest.hasKey && (
+                      <div className="mt-1 text-[10px] text-rose-500">未检测到已保存的 API Key，请先保存设置。</div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

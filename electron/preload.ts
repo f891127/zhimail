@@ -61,6 +61,8 @@ const api = {
   },
   ai: {
     test: (config: unknown) => invoke('ai/test', config),
+    balance: (force?: boolean) => invoke('ai/balance', force),
+    testBalance: () => invoke('ai/testBalance'),
     summarize: (messageId: string) => invoke('ai/summarize', messageId),
     summarizeThread: (threadId: string) => invoke('ai/thread', threadId),
     analyze: (params: unknown) => invoke('ai/analyze', params),

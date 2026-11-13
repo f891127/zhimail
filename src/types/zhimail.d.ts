@@ -483,6 +483,15 @@ export interface ZhimailApi {
   ai: {
     test: (config: unknown) => Promise<{ ok: boolean; reply?: string; model?: string; error?: string }>;
     balance: (force?: boolean) => Promise<BalanceInfo>;
+    testBalance: () => Promise<{
+      ok: boolean;
+      provider: string;
+      label?: string;
+      hasKey: boolean;
+      baseUrl: string;
+      steps: { url: string; ok: boolean; status?: number; message: string }[];
+      message: string;
+    }>;
     summarize: (messageId: string) => Promise<{ ok: boolean; markdown?: string; error?: string }>;
     summarizeThread: (threadId: string) => Promise<{ ok: boolean; markdown?: string; count?: number; error?: string }>;
     analyze: (params: RangeAnalysisParams) => Promise<{ ok: boolean; result?: RangeAnalysis; error?: string }>;

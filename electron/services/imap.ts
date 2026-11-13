@@ -228,9 +228,11 @@ export class ImapService {
   }
 
   /** 枚举服务器文件夹并写入本地索引 */
-  async syncFolders(account: Account): Promise<Folder[]> {
-    const client = this.createClient(account);
-    await client.connect();
+  async syncFolders(account: Account, sharedClient?: ImapFlow): Promise<Folder[]> {
+    // 复用同步过程中已有的连接：部分邮箱（腾讯企业邮等）限制并发连接数，
+    // 同时开两条会被服务器踢掉一条，表现为「Connection not available」
+    const client = sharedClient ?? this.createClient(account);
+    if (!sharedClient) await client.connect();
     try {
       const list = await client.list();
       const existing = store.listFolders(account.id);
@@ -282,10 +284,12 @@ export class ImapService {
       folders.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'zh'));
       return folders;
     } finally {
-      try {
-        await client.logout();
-      } catch {
-        /* 忽略 */
+      if (!sharedClient) {
+        try {
+          await client.logout();
+        } catch {
+          /* 忽略 */
+        }
       }
     }
   }
@@ -323,7 +327,7 @@ export class ImapService {
     await client.connect();
 
     try {
-      const remoteFolders = await this.syncFolders(account);
+      const remoteFolders = await this.syncFolders(account, client);
       for (const folder of remoteFolders) {
         store.upsertFolder(folder);
       }
@@ -356,6 +360,20 @@ export class ImapService {
           const count = await this.syncFolder(client, account, folder, options, onProgress);
           fetched += count;
         } catch (error) {
+          const message = String((error as Error)?.message ?? '');
+          const dropped = /connection not available|connection closed|not authenticated|socket/i.test(message);
+          if (dropped) {
+            // 服务器把连接踢掉（并发限制或空闲超时）：重连一次再试这个文件夹
+            try {
+              if (!client.usable) await client.connect();
+              const count = await this.syncFolder(client, account, folder, options, onProgress);
+              fetched += count;
+              continue;
+            } catch (retryError) {
+              errors.push(`${folder.name}: ${describeImapError(retryError)}`);
+              continue;
+            }
+          }
           errors.push(`${folder.name}: ${describeImapError(error)}`);
         }
       }

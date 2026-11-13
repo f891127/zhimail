@@ -6,7 +6,7 @@ import path from 'node:path';
 import { store } from './services/store';
 import type { AppLocale } from './services/types';
 import { applyAppBehavior, getDefaultMailClientStatus, setDefaultMailClient } from './services/system';
-import { fetchBalance, resetBalanceCache } from './services/ai/balance';
+import { fetchBalance, resetBalanceCache, testBalance } from './services/ai/balance';
 import { defaultDataDir, isCustomDataDir, migrateData, saveDataDir } from './services/location';
 import {
   backupFileName,
@@ -483,6 +483,7 @@ export function registerIpcHandlers(): void {
 
   // 模型账户余额（状态栏展示）
   ipcMain.handle('ai/balance', (_event, force?: boolean) => fetchBalance(Boolean(force)));
+  ipcMain.handle('ai/testBalance', () => testBalance());
 
   ipcMain.handle('ai/test', async (_event, config: Partial<AISettings> & { apiKey?: string }) => {
     try {
