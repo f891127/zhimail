@@ -62,6 +62,10 @@ let state: UpdateState = {
 
 let listeners: ((value: UpdateState) => void)[] = [];
 let initialized = false;
+/** 下载进度事件的上次推送时间，用于节流 */
+let lastProgressAt = 0;
+/** 下载期间用户改过更新源，等下载结束再应用 */
+let pendingFeed = false;
 
 function setState(patch: Partial<UpdateState>): void {
   state = { ...state, ...patch, currentVersion: app.getVersion() };
@@ -110,6 +114,13 @@ export function resolveUpdateFeed(): Record<string, unknown> {
 
 /** 应用更新源；切换设置后需要重新调用 */
 export function applyUpdateFeed(): void {
+  // 下载过程中改 setFeedURL 会把正在进行的下载任务打断（进度停住不动），
+  // 这里先记下改动，等这次下载结束再应用。
+  if (state.phase === 'downloading') {
+    pendingFeed = true;
+    return;
+  }
+  pendingFeed = false;
   try {
     autoUpdater.setFeedURL(resolveUpdateFeed() as never);
   } catch (error) {
@@ -123,6 +134,9 @@ export function initUpdater(): void {
 
   autoUpdater.autoDownload = store.getSettings().update?.autoDownload ?? false;
   autoUpdater.autoInstallOnAppQuit = true;
+  // 差分下载依赖旧安装包与 blockmap，校验不通过时会整包重下（进度会从 100% 回到 0）。
+  // 关掉它，一次下载一次完成，进度条不会「下完又重下」。
+  autoUpdater.disableDifferentialDownload = true;
   autoUpdater.allowPrerelease = false;
   autoUpdater.logger = null;
 
@@ -139,16 +153,19 @@ export function initUpdater(): void {
     }),
   );
   autoUpdater.on('update-not-available', () => setState({ phase: 'not-available', version: undefined }));
-  autoUpdater.on('download-progress', (progress) =>
-    setState({
-      phase: 'downloading',
-      percent: Math.round(progress.percent * 10) / 10,
-      bytesPerSecond: progress.bytesPerSecond,
-    }),
-  );
-  autoUpdater.on('update-downloaded', (info) =>
-    setState({ phase: 'downloaded', version: info.version, percent: 100, error: undefined }),
-  );
+  autoUpdater.on('download-progress', (progress) => {
+    const percent = Math.round(progress.percent * 10) / 10;
+    const now = Date.now();
+    // 每秒最多刷 4 次进度，避免大量 IPC + 重渲染把界面卡住
+    if (percent < 100 && now - lastProgressAt < 250) return;
+    lastProgressAt = now;
+    setState({ phase: 'downloading', percent, bytesPerSecond: progress.bytesPerSecond });
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    setState({ phase: 'downloaded', version: info.version, percent: 100, error: undefined });
+    // 下载期间用户改过更新源，等这次下载结束再生效
+    if (pendingFeed) applyUpdateFeed();
+  });
   // 该事件在部分 electron-updater 版本的类型定义中缺失，这里按事件名注册
   (autoUpdater as unknown as { on: (event: string, listener: () => void) => void }).on(
     'before-quit-for-update',
@@ -169,6 +186,8 @@ export function initUpdater(): void {
           ? `无法连接更新服务器（${raw.slice(0, 120)}）。常见原因是网络无法直连 GitHub，可在下方把更新源切换为镜像地址后重试。`
           : raw.slice(0, 400),
     });
+    // 下载失败后把挂起的更新源改动应用上，用户换源重试才能真的换到新源
+    if (pendingFeed) applyUpdateFeed();
   });
 
   // 启动后自动检查（打包版本才可用）
@@ -233,11 +252,17 @@ export async function downloadUpdate(): Promise<UpdateState> {
     setState({ phase: 'unsupported', error: '开发模式无法下载更新' });
     return state;
   }
-  try {
-    await autoUpdater.downloadUpdate();
-  } catch (error) {
-    setState({ phase: 'error', error: String((error as Error).message).slice(0, 400) });
+  // 已经在下载或已下载完成时不要重复触发，否则会出现第二次下载
+  if (state.phase === 'downloading' || state.phase === 'downloaded' || state.phase === 'installing') {
+    return state;
   }
+  setState({ phase: 'downloading', percent: 0, bytesPerSecond: 0, error: undefined });
+  lastProgressAt = 0;
+  // 不 await 整个下载过程：IPC 立即返回，进度靠 download-progress 事件推送，
+  // 否则点「开始下载」后这次调用要等到下载结束才回来，界面上就像点了没反应。
+  void autoUpdater.downloadUpdate().catch((error) => {
+    setState({ phase: 'error', error: String((error as Error).message).slice(0, 400) });
+  });
   return state;
 }
 

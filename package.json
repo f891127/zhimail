@@ -1,7 +1,7 @@
 {
   "name": "zhimail",
   "productName": "智邮",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "private": true,
   "description": "智能桌面邮件客户端，内置AI汇总、简报与待办能力。",
   "author": {
@@ -42,7 +42,6 @@
     "mailparser": "^3.7.1",
     "mammoth": "^1.13.0",
     "nodemailer": "^6.9.16",
-    "pdfjs-dist": "^4.10.38",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
@@ -57,6 +56,7 @@
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
     "marked": "^14.1.3",
+    "pdfjs-dist": "4.10.38",
     "pngjs": "^7.0.0",
     "postcss": "^8.4.49",
     "react": "^18.3.1",

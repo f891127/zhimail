@@ -262,9 +262,17 @@ export function SettingsDialog() {
     hint?: string,
   ) => {
     const url = (next.customUrl ?? customUrl).trim();
+    const downloading = updateState?.phase === 'downloading';
     await store.updateSettings({
       update: { ...(settings?.update ?? {}), source: next.source, customUrl: url },
     });
+    if (downloading) {
+      store.pushToast({
+        type: 'info',
+        title: '更新源已记录',
+        message: '当前正在下载更新，新源会在这次下载结束后生效（下载不会被打断）。',
+      });
+    }
     if (next.customUrl !== undefined) setCustomUrl(url);
     store.pushToast({
       type: 'success',
@@ -1688,6 +1696,12 @@ export function SettingsDialog() {
                       下载更新
                     </button>
                   )}
+                  {updateState?.phase === 'downloading' && (
+                    <button type="button" className="ghost-btn" disabled>
+                      <Icon name="download" size={12} className="animate-pulse" />
+                      下载中 {Math.floor(updateState.percent ?? 0)}%
+                    </button>
+                  )}
                   {updateState?.phase === 'downloaded' && updateState.canAutoInstall && (
                     <button type="button" className="primary-btn" onClick={() => void store.installUpdate()}>
                       <Icon name="check-circle" size={12} />
@@ -1852,7 +1866,7 @@ export function SettingsDialog() {
                   )}
                 </div>
                 <p className="text-[11px] leading-5 text-shell-faint">
-                  更新包发布在 GitHub Releases（f891127/zhimail）。客户端通过 latest.yml 比对版本，仅下载差异部分。
+                  更新包发布在 GitHub Releases（f891127/zhimail）。客户端通过 latest.yml 比对版本后下载安装包。
                   若提示连接超时，通常是本机网络无法直连 GitHub，可切换到镜像地址后重试。
                 </p>
               </div>
