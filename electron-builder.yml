@@ -10,12 +10,26 @@ files:
   - dist-electron/**/*
   - dist-renderer/**/*
   - package.json
-  - '!**/*.map'
-  - '!**/{.eslintrc,.editorconfig,.prettierrc}'
+  # 瘦身：源码、类型声明、源码映射、文档、示例与测试都不进安装包
+  - '!**/*.{map,ts,tsx,mts,cts,d.ts,d.cts,d.mts}'
+  - '!**/{README*,CHANGELOG*,LICENSE*,AUTHORS*,NOTICE*,*.md}'
+  - '!**/{test,tests,__tests__,example,examples,docs,doc,benchmark,benchmarks}/**'
+  - '!**/{.eslintrc,.editorconfig,.prettierrc}/**'
+  # docx 同时发布 cjs / mjs / iife / umd 四种构建，主进程只用 cjs，其余可省 8MB+
+  - '!node_modules/docx/**/*.{mjs,iife.js,umd.cjs}'
 
 asar: true
 asarUnpack:
   - '**/*.node'
+
+# 最大压缩：安装包体积更小，整包更新更快
+compression: maximum
+# 只保留中英文语言资源，其余 50 多个 Chromium 语言包不打包
+electronLanguages:
+  - zh-CN
+  - en-US
+# 打包后清理 Chromium 许可证文件与多余语言包（双保险）
+afterPack: scripts/afterPack.cjs
 
 # 在线更新：发布到 GitHub Releases，客户端通过 latest.yml 检查新版本
 publish:
