@@ -5,6 +5,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { initUpdater, isInstallingUpdate, onUpdateState } from './services/updater';
 import { store } from './services/store';
+import { initLogger, logLine, logRendererError, getLogPath } from './services/log';
 import { resolveDataDir } from './services/location';
 import { maybeAutoBackup } from './services/backup';
 import { registerIpcHandlers, setMainWindow, startAutoReceive, startScheduler, warmDataSize } from './ipc';
@@ -590,6 +591,9 @@ if (!gotLock) {
 
     // 数据目录可由用户在设置中修改，位置记录在 userData 下，启动时解析
     store.init(resolveDataDir());
+    // 日志跟着数据目录走：白屏 / 闪退时可在 <数据目录>/logs/app.log 里查原因
+    initLogger(store.root);
+    logLine('app', `启动 v${app.getVersion()}（${app.isPackaged ? '打包版' : '开发版'}），数据目录 ${store.root}`);
     const settings = store.getSettings();
     if (!settings.bootstrapped) {
       seedDemoData(false);
@@ -624,10 +628,14 @@ if (!gotLock) {
       );
     });
     mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-      if (level >= 2) console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`);
+      if (level >= 2) {
+        console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`);
+        logLine(`renderer:${level}`, `${message} (${sourceId}:${line})`);
+      }
     });
     mainWindow.webContents.on('render-process-gone', (_event, details) => {
       console.log('[renderer] 进程异常退出：', details.reason);
+      logLine('renderer-gone', `进程异常退出：${details.reason}`);
     });
 
     // 自动简报调度：仅当用户开启且已配置模型时运行

@@ -141,10 +141,13 @@ function ThreadRow({
   const expanded = store.expandedThreadIds.includes(thread.threadId);
   const active = thread.messages.some((message) => message.id === store.selectedMessageId);
   const latest = thread.messages[thread.messages.length - 1];
+  // 会话里的邮件可能刚被删除，这时整行直接不渲染，避免访问 undefined 崩掉整个列表
+  if (!latest) return null;
 
   return (
     <div>
       <div
+        data-thread-row={latest.id}
         onClick={(event) =>
           void store.selectMessage(latest.id, {
             shiftKey: event.shiftKey,

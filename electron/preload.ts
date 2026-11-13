@@ -21,6 +21,9 @@ const api = {
     info: () => invoke('app/info'),
     chooseDataDir: () => invoke('app/chooseDataDir'),
     dataSize: (options?: { force?: boolean }) => invoke('app/dataSize', options),
+    reportError: (payload: { message: string; stack?: string; source?: string }) =>
+      invoke('app/report-error', payload),
+    logPath: () => invoke('app/logPath'),
     resetDataDir: () => invoke('app/resetDataDir'),
     relaunch: () => invoke('app/relaunch'),
     system: () => invoke('app/system'),

@@ -311,6 +311,16 @@ export function SettingsDialog() {
     if (store.settingsOpen && activeTab === 'data') void loadDataSize();
   }, [store.settingsOpen, activeTab]);
 
+  // 运行日志位置（白屏 / 闪退排查用）
+  const [logPath, setLogPath] = useState('');
+  useEffect(() => {
+    if (!store.settingsOpen) return;
+    void api.app
+      .logPath()
+      .then((value) => setLogPath(value))
+      .catch(() => setLogPath(''));
+  }, [store.settingsOpen]);
+
   // 数据存储位置
   const changeDataDir = async () => {
     const result = await api.app.chooseDataDir();
@@ -1963,7 +1973,20 @@ export function SettingsDialog() {
                   >
                     打开数据目录
                   </button>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => void api.system.openPath(logPath || info?.dataDir || '')}
+                    title={logPath || '运行日志写入数据目录下的 logs 文件夹'}
+                  >
+                    打开运行日志
+                  </button>
                 </div>
+                {logPath && (
+                  <p className="text-[11px] leading-5 text-shell-faint">
+                    运行日志：{logPath}（界面报错、更新异常都会记录在这里，反馈问题时可直接附上）
+                  </p>
+                )}
               </div>
             )}
           </div>

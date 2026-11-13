@@ -458,6 +458,8 @@ export interface ZhimailApi {
       cached?: boolean;
       partial?: boolean;
     }>;
+    reportError: (payload: { message: string; stack?: string; source?: string }) => Promise<boolean>;
+    logPath: () => Promise<string>;
     resetDataDir: () => Promise<{ dataDir: string }>;
     relaunch: () => Promise<boolean>;
     system: () => Promise<AppSystemState>;

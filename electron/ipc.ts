@@ -4,6 +4,7 @@ import { BrowserWindow, dialog, ipcMain, shell, app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { store } from './services/store';
+import { logRendererError, getLogPath, logLine } from './services/log';
 import { attachmentPreviewUrl } from './services/attachmentServer';
 import type { AppLocale } from './services/types';
 import { applyAppBehavior, getDefaultMailClientStatus, setDefaultMailClient } from './services/system';
@@ -361,6 +362,13 @@ export function registerIpcHandlers(): void {
   }));
 
   /** 统计数据目录占用：文件数与字节数（邮件正文、附件、简报都在里面） */
+  ipcMain.handle('app/report-error', (_event, payload: { message: string; stack?: string; source?: string }) => {
+    logRendererError(payload);
+    return true;
+  });
+
+  ipcMain.handle('app/logPath', () => getLogPath());
+
   ipcMain.handle('app/dataSize', async (_event, options?: { force?: boolean }) => {
     const root = store.root;
     // 目录可能很大（上万封邮件的正文与附件），缓存 5 分钟，避免每次打开设置都全盘遍历
