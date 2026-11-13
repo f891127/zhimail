@@ -214,6 +214,41 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
       })()`,
       waitMs: 2200,
     },
+    {
+      name: '17-attachment-menu',
+      script: `(() => {
+        const closeDialog = () => {
+          const dialog = Array.from(document.querySelectorAll('div')).find((el) =>
+            (el.textContent || '').includes('本次更新内容'),
+          );
+          if (!dialog) return;
+          const btn = Array.from(dialog.querySelectorAll('button')).find(
+            (item) => (item.textContent || '').trim() === '关闭',
+          );
+          if (btn) btn.click();
+        };
+        closeDialog();
+        window.__zhimailDev?.showMail?.();
+        window.__zhimailDev?.selectBySubject?.('湿包');
+        setTimeout(() => {
+          const chip = Array.from(document.querySelectorAll('button')).find((el) =>
+            (el.textContent || '').includes('湿包现场记录'),
+          );
+          if (!chip) return;
+          const rect = chip.getBoundingClientRect();
+          chip.dispatchEvent(
+            new MouseEvent('contextmenu', {
+              bubbles: true,
+              cancelable: true,
+              clientX: Math.round(rect.left + rect.width / 2),
+              clientY: Math.round(rect.top + rect.height / 2),
+            }),
+          );
+        }, 3200);
+        return true;
+      })()`,
+      waitMs: 5600,
+    },
     { name: '02-ai-panel', script: 'window.__zhimailDev?.showAI?.()' },
     {
       name: '02b-analysis',

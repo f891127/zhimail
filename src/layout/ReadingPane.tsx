@@ -1,6 +1,6 @@
 /** 阅读窗格：邮件头信息、AI 操作条、正文渲染、附件与会话上下文 */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { AttachmentPreview } from '@/components/AttachmentPreview';
 import { Icon } from '@/components/Icon';
@@ -51,6 +51,21 @@ export function ReadingPane() {
   const [showAllRecipients, setShowAllRecipients] = useState(false);
   /** 附件预览弹窗（受设置中的「附件预览」开关控制） */
   const [preview, setPreview] = useState<{ filename: string; size?: number } | null>(null);
+  /** 附件右键菜单 */
+  const [attachMenu, setAttachMenu] = useState<{
+    x: number;
+    y: number;
+    filename: string;
+    size?: number;
+  } | null>(null);
+  /** 单击延迟：若紧接着是双击，就不再弹预览 */
+  const attachClickTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (attachClickTimer.current) window.clearTimeout(attachClickTimer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     setShowThread(false);
@@ -235,6 +250,65 @@ export function ReadingPane() {
         <ContextMenu x={moreMenu.x} y={moreMenu.y} items={overflowItems} onClose={() => setMoreMenu(null)} />
       )}
 
+      {/* 附件右键菜单：另存为 / 打开 / 预览 */}
+      {attachMenu && selectedMessage && (
+        <ContextMenu
+          x={attachMenu.x}
+          y={attachMenu.y}
+          items={[
+            {
+              label: '打开（系统默认程序）',
+              shortcut: '双击',
+              onClick: () => {
+                const target = attachMenu;
+                setAttachMenu(null);
+                void api.messages.attachmentOpen({
+                  messageId: selectedMessage.id,
+                  filename: target.filename,
+                });
+              },
+            },
+            {
+              label: '另存为…',
+              onClick: () => {
+                const target = attachMenu;
+                setAttachMenu(null);
+                void (async () => {
+                  const result = await api.messages.attachmentSave({
+                    messageId: selectedMessage.id,
+                    filename: target.filename,
+                  });
+                  if (result.ok) {
+                    store.pushToast({ type: 'success', title: '附件已保存', message: result.path });
+                  } else if (!result.canceled) {
+                    store.pushToast({ type: 'error', title: '另存失败', message: result.error });
+                  }
+                })();
+              },
+            },
+            {
+              label: '在线预览',
+              onClick: () => {
+                const target = attachMenu;
+                setAttachMenu(null);
+                setPreview({ filename: target.filename, size: target.size });
+              },
+            },
+            { divider: true },
+            {
+              label: '复制文件名',
+              onClick: () => {
+                const target = attachMenu;
+                setAttachMenu(null);
+                void navigator.clipboard?.writeText(target.filename);
+                store.pushToast({ type: 'success', title: '已复制文件名', message: target.filename });
+              },
+            },
+          ]}
+          onClose={() => setAttachMenu(null)}
+        />
+      )}
+
       {/* 重要度提示 */}
       {triage && (
         <div className="flex shrink-0 items-start gap-2 border-b border-brand-100 bg-brand-50/50 px-4 py-1.5 text-[11px] text-brand-800">
@@ -357,27 +431,49 @@ export function ReadingPane() {
             {selectedMessage.body.attachments.map((attachment) => (
               <button
                 key={`${attachment.index}-${attachment.filename}`}
-                onDoubleClick={() =>
+                type="button"
+                onDoubleClick={() => {
+                  // 双击：取消待执行的预览，直接交给系统默认程序打开
+                  if (attachClickTimer.current) {
+                    window.clearTimeout(attachClickTimer.current);
+                    attachClickTimer.current = null;
+                  }
+                  setPreview(null);
                   void api.messages.attachmentOpen({
                     messageId: selectedMessage.id,
                     filename: attachment.filename,
-                  })
-                }
-                type="button"
+                  });
+                }}
                 onClick={() => {
-                  const previewOn = store.settings?.mail?.attachmentPreview ?? true;
-                  if (previewOn && !attachment.localPath) {
-                    setPreview({ filename: attachment.filename, size: attachment.size });
-                    return;
+                  if (attachClickTimer.current) window.clearTimeout(attachClickTimer.current);
+                  attachClickTimer.current = window.setTimeout(() => {
+                    attachClickTimer.current = null;
+                    const previewOn = store.settings?.mail?.attachmentPreview ?? true;
+                    if (previewOn) {
+                      setPreview({ filename: attachment.filename, size: attachment.size });
+                      return;
+                    }
+                    void api.messages.attachmentOpen({
+                      messageId: selectedMessage.id,
+                      filename: attachment.filename,
+                    });
+                  }, 240);
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  if (attachClickTimer.current) {
+                    window.clearTimeout(attachClickTimer.current);
+                    attachClickTimer.current = null;
                   }
-                  if (previewOn) {
-                    setPreview({ filename: attachment.filename, size: attachment.size });
-                    return;
-                  }
-                  if (attachment.localPath) void api.system.openPath(attachment.localPath);
+                  setAttachMenu({
+                    x: event.clientX,
+                    y: event.clientY,
+                    filename: attachment.filename,
+                    size: attachment.size,
+                  });
                 }}
                 className="flex items-center gap-1.5 rounded border border-shell-line bg-white px-2 py-1 text-[11px] text-shell-text transition-colors duration-120 hover:border-brand-300 hover:text-brand-600"
-                title={attachment.localPath ?? '附件尚未下载'}
+                title={`${attachment.filename}\n双击用系统程序打开 · 右键可另存为`}
               >
                 <Icon name="document" size={12} className="text-brand-500" />
                 <span className="max-w-[180px] truncate">{attachment.filename}</span>
