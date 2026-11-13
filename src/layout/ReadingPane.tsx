@@ -445,7 +445,7 @@ export function ReadingPane() {
               </div>
             )}
           <iframe
-            key={`${selectedMessage.id}-${htmlDoc.length}`}
+            key={`${selectedMessage.id}-${store.bodyVersion}-${htmlDoc.length}`}
             title="邮件正文"
             srcDoc={htmlDoc}
             sandbox={IFRAME_SANDBOX}

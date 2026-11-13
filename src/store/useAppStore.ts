@@ -151,6 +151,8 @@ interface State {
   /** 选中邮件；按住 Shift 选连续区间，按住 Ctrl/⌘ 点选多封 */
   /** 正在重新解码正文 */
   redecoding: boolean;
+  /** 正文版本号：每次重新解码 +1，用于强制刷新正文视图 */
+  bodyVersion: number;
   /** 重新解码正文：不传 charset 时自动挑最优编码 */
   redecodeMessage: (id: string, charset?: string) => Promise<void>;
   /** 导出邮件原文（.eml） */
@@ -280,9 +282,22 @@ function toastId(): string {
   return `t-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
 }
 
+/** 已经自动尝试过修复的邮件，避免反复请求服务器 */
+const autoHealed = new Set<string>();
+
+/** 与主进程一致的乱码判定（轻量版） */
+function looksGarbled(text: string): boolean {
+  if (!text) return false;
+  if (/[\uff61-\uff9f]/.test(text) || text.includes('\ufffd')) return true;
+  if (/锟斤拷|烫烫烫|ï¿½/.test(text)) return true;
+  const shapes = (text.match(/[\u25A0-\u25FF]/g) ?? []).length;
+  return shapes >= 4 && shapes > text.length * 0.02;
+}
+
 export const useAppStore = create<State>((set, get) => ({
   ready: false,
   redecoding: false,
+  bodyVersion: 0,
   info: null,
   accounts: [],
   folders: [],
@@ -587,6 +602,7 @@ export const useAppStore = create<State>((set, get) => ({
       }
       const body = result.body;
       set((state) => ({
+        bodyVersion: state.bodyVersion + 1,
         selectedMessage:
           state.selectedMessage && state.selectedMessage.id === id
             ? { ...state.selectedMessage, body }
@@ -674,6 +690,14 @@ export const useAppStore = create<State>((set, get) => ({
     });
     const message = await api.messages.get(id);
     set({ selectedMessage: message ?? null });
+    // 正文疑似乱码（多为旧版本缓存下来的坏数据）时，自动重新解码一次，每封只尝试一次
+    if (message && !autoHealed.has(id)) {
+      const raw = message.body.text ?? message.body.html ?? '';
+      if (looksGarbled(raw)) {
+        autoHealed.add(id);
+        void get().redecodeMessage(id);
+      }
+    }
     if (message && !message.flags.includes('\\Seen')) {
       const folders = await api.messages.setFlags({ ids: [id], flag: '\\Seen', value: true });
       set((state) => ({
