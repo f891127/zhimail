@@ -16,6 +16,8 @@ type PdfDocument = Awaited<ReturnType<typeof import('pdfjs-dist')['getDocument']
 export function PdfViewer({ url, filename }: { url: string; filename: string }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const docRef = useRef<PdfDocument | null>(null);
+  // 同一块 canvas 上不能并发渲染，缩放连点时要先取消上一次
+  const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
   const [doc, setDoc] = useState<PdfDocument | null>(null);
   const [page, setPage] = useState(1);
   const [scale, setScale] = useState(1.2);
@@ -60,6 +62,7 @@ export function PdfViewer({ url, filename }: { url: string; filename: string }) 
     let cancelled = false;
     void (async () => {
       try {
+        renderTaskRef.current?.cancel();
         const pdfPage = await doc.getPage(page);
         if (cancelled) return;
         const viewport = pdfPage.getViewport({ scale });
@@ -72,17 +75,20 @@ export function PdfViewer({ url, filename }: { url: string; filename: string }) 
         canvas.style.height = `${Math.floor(viewport.height)}px`;
         const context = canvas.getContext('2d');
         if (!context) return;
-        await pdfPage.render({
+        const task = pdfPage.render({
           canvasContext: context,
           viewport,
           transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0],
-        }).promise;
+        });
+        renderTaskRef.current = task;
+        await task.promise;
       } catch (err) {
         if (!cancelled) setError((err as Error).message || '页面渲染失败');
       }
     })();
     return () => {
       cancelled = true;
+      renderTaskRef.current?.cancel();
     };
   }, [doc, page, scale]);
 
