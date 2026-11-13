@@ -575,6 +575,8 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
 // 否则同一程序会显示成两个图标
 if (process.platform === 'win32') app.setAppUserModelId('com.zhimail.desktop');
 
+// 启动耗时基准：用于定位「装完点完成卡一会儿」这类冷启动问题
+const BOOT_TS = Date.now();
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
@@ -590,13 +592,18 @@ if (!gotLock) {
     nativeTheme.themeSource = 'light';
 
     // 数据目录可由用户在设置中修改，位置记录在 userData 下，启动时解析
+    logLine('perf', `whenReady 耗时 ${Date.now() - BOOT_TS}ms`);
+    const tStore = Date.now();
     store.init(resolveDataDir());
+    logLine('perf', `store.init 耗时 ${Date.now() - tStore}ms`);
     // 日志跟着数据目录走：白屏 / 闪退时可在 <数据目录>/logs/app.log 里查原因
     initLogger(store.root);
     logLine('app', `启动 v${app.getVersion()}（${app.isPackaged ? '打包版' : '开发版'}），数据目录 ${store.root}`);
     const settings = store.getSettings();
     if (!settings.bootstrapped) {
+      const tSeed = Date.now();
       seedDemoData(false);
+      logLine('perf', `首次写入示例数据 ${Date.now() - tSeed}ms`);
     }
 
     registerIpcHandlers();
@@ -605,6 +612,9 @@ if (!gotLock) {
     // 启动时按设置里的间隔开启定时收取（默认 15 分钟）
     startAutoReceive();
     mainWindow = createWindow();
+    mainWindow.once('ready-to-show', () => {
+      logLine('perf', `窗口可显示 总耗时 ${Date.now() - BOOT_TS}ms`);
+    });
     setMainWindow(mainWindow);
     applyAppBehavior(mainWindow);
 
