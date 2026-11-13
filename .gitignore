@@ -6,3 +6,4 @@ release/
 .DS_Store
 .env
 shots/e2e-report.json
+release-notes.md

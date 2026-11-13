@@ -23,6 +23,10 @@ publish:
   owner: f891127
   repo: zhimail
   releaseType: release
+# 把 CHANGELOG.md 中当前版本的说明写入 latest.yml，
+# 客户端检查更新时即可直接显示本次更新内容
+releaseInfo:
+  releaseNotesFile: release-notes.md
 
 win:
   target:
