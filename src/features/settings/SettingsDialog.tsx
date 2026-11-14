@@ -191,6 +191,24 @@ export function SettingsDialog() {
   const [backupInfo, setBackupInfo] = useState<BackupOverview | null>(null);
   const [scheduleBusy, setScheduleBusy] = useState<string | null>(null);
 
+  // 桌面图标被清理工具删掉 / 升级后丢失时，一键补回来
+  const [shortcutBusy, setShortcutBusy] = useState(false);
+  const repairShortcut = async () => {
+    setShortcutBusy(true);
+    try {
+      const result = await api.app.createDesktopShortcut();
+      store.pushToast(
+        result.ok
+          ? { type: 'success', title: '已重建桌面图标', message: result.path ?? '桌面上的「智邮」图标已恢复' }
+          : { type: 'error', title: '重建失败', message: result.error ?? '未知错误' },
+      );
+    } catch (error) {
+      store.pushToast({ type: 'error', title: '重建失败', message: (error as Error).message });
+    } finally {
+      setShortcutBusy(false);
+    }
+  };
+
   // 「测试」结果：只反映最近一次探测，不写进设置
   const [sourceTest, setSourceTest] = useState<{
     ok: boolean;
@@ -1784,6 +1802,26 @@ export function SettingsDialog() {
                     智能桌面邮件客户端，内置AI汇总、简报与待办能力。
                   </div>
                 </div>
+
+                <div>
+                  <div className="mb-1 text-[11px] font-semibold text-shell-sub">桌面图标</div>
+                  <div className="rounded border border-shell-lineSoft bg-[#fafbfc] px-3 py-2 text-[11px] leading-5">
+                    <div className="text-shell-faint">
+                      桌面上的「智邮」图标被清理工具删掉，或升级后不见了，可以在这里一键补回来。
+                    </div>
+                    <div className="mt-1.5">
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        disabled={shortcutBusy}
+                        onClick={() => void repairShortcut()}
+                      >
+                        {shortcutBusy ? '创建中…' : '重建桌面图标'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
 
                 <div>
                   <div className="mb-1 text-[11px] font-semibold text-shell-sub">数据存储位置</div>

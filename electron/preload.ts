@@ -24,6 +24,7 @@ const api = {
     reportError: (payload: { message: string; stack?: string; source?: string }) =>
       invoke('app/report-error', payload),
     logPath: () => invoke('app/logPath'),
+    createDesktopShortcut: () => invoke('app/createDesktopShortcut'),
     resetDataDir: () => invoke('app/resetDataDir'),
     relaunch: () => invoke('app/relaunch'),
     system: () => invoke('app/system'),

@@ -120,6 +120,7 @@ const mockApi: ZhimailApi = {
     dataSize: async () => ({ dataDir: '浏览器预览模式（无本地数据）', bytes: 0, files: 0 }),
     reportError: async () => true,
     logPath: async () => '',
+    createDesktopShortcut: async () => ({ ok: false, error: '浏览器预览模式不支持' }),
     resetDataDir: async () => ({ dataDir: emptyInfo.dataDir }),
     relaunch: async () => false,
     system: async () => mockSystemState(),

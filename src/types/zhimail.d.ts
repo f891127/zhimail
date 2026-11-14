@@ -461,6 +461,7 @@ export interface ZhimailApi {
     }>;
     reportError: (payload: { message: string; stack?: string; source?: string }) => Promise<boolean>;
     logPath: () => Promise<string>;
+    createDesktopShortcut: () => Promise<{ ok: boolean; path?: string; error?: string }>;
     resetDataDir: () => Promise<{ dataDir: string }>;
     relaunch: () => Promise<boolean>;
     system: () => Promise<AppSystemState>;

@@ -1,7 +1,7 @@
 {
   "name": "zhimail",
   "productName": "智邮",
-  "version": "1.4.15",
+  "version": "1.4.16",
   "private": true,
   "description": "智能桌面邮件客户端，内置AI汇总、简报与待办能力。",
   "author": {

@@ -368,6 +368,33 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('app/logPath', () => getLogPath());
+  /**
+   * 重建桌面快捷方式。
+   * 用途：桌面图标被安全软件/优化工具误删，或升级过程中丢失时，让用户自己一键补回来。
+   * 用 Electron 的 shell.writeShortcutLink（Windows 专有），路径取 app.getPath('desktop')，
+   * 这样桌面被 OneDrive 等重定向时也能落到真实桌面目录。
+   */
+  ipcMain.handle('app/createDesktopShortcut', () => {
+    if (process.platform !== 'win32') {
+      return { ok: false, error: '仅 Windows 支持创建桌面快捷方式' };
+    }
+    try {
+      const desktop = app.getPath('desktop');
+      const target = process.execPath;
+      const linkPath = path.join(desktop, '智邮.lnk');
+      const ok = shell.writeShortcutLink(linkPath, 'create', {
+        target,
+        cwd: path.dirname(target),
+        icon: target,
+        iconIndex: 0,
+        description: '智邮 ZhiYou 桌面邮件客户端',
+        appUserModelId: 'com.zhimail.desktop',
+      });
+      return ok ? { ok: true, path: linkPath } : { ok: false, error: '写入快捷方式失败' };
+    } catch (error) {
+      return { ok: false, error: (error as Error).message };
+    }
+  });
 
   ipcMain.handle('app/dataSize', async (_event, options?: { force?: boolean }) => {
     const root = store.root;

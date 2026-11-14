@@ -62,7 +62,9 @@ nsis:
   perMachine: false
   allowElevation: true
   allowToChangeInstallationDirectory: true
-  createDesktopShortcut: true
+  # always：升级与静默更新时也一定重建桌面图标（勾选状态不再影响），
+  # 配合 build/installer.nsh 里的兜底创建，避免「更新一次图标消失一次」
+  createDesktopShortcut: always
   createStartMenuShortcut: true
   shortcutName: 智邮
   uninstallDisplayName: 智邮

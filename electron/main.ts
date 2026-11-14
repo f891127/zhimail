@@ -571,6 +571,14 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
       })()`,
       waitMs: 2200,
     },
+    {
+      name: '08-settings-about',
+      script: `(() => {
+        window.__zhimailDev?.openSettings?.('about');
+        return true;
+      })()`,
+      waitMs: 2200,
+    },
   ];
 
   for (const view of views) {
