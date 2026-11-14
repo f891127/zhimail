@@ -1,0 +1,17 @@
+{
+  "productName": "智邮 ZhiYou",
+  "productTagline": "ZHIYOU MAIL",
+  "author": "fxj",
+  "artifactsDir": "/home/ubuntu/zhimail-release",
+  "siteDir": "/home/ubuntu/zhiyou",
+  "setupPattern": "^ZhiYou-Setup-.*-x64\\.exe$",
+  "portablePattern": "^ZhiYou-Portable-.*-x64\\.zip$",
+  "setupDownloadName": "ZhiYou-Setup-{version}-x64.exe",
+  "portableDownloadName": "ZhiYou-Portable-{version}-x64.zip",
+  "feedPath": "public/updates/latest.yml",
+  "pagePath": "public/index.html",
+  "updateBaseUrl": "https://zhiyou-emy2c9va.manus.space/updates",
+  "installNote": "安装版会自动创建开始菜单与桌面快捷方式，并支持客户端内一键在线更新；",
+  "portableNote": "便携版解压即用，更新请重新下载。",
+  "leadText": "桌面邮件客户端 · 下载与在线更新服务"
+}

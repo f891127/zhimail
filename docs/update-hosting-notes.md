@@ -69,7 +69,54 @@ GitHub        只放代码（CI 仍负责编译，产物不再作为唯一分发
 
 ## 待办（确定方案后执行）
 
-- [ ] 建一个最小的 WebDev 静态站，暴露 `/updates/latest.yml`
-- [ ] CI 增加一步：构建后上传 exe + blockmap 到 CDN，生成含绝对地址的 latest.yml 并发布
-- [ ] 客户端默认更新源切到 Manus 地址；「测速并选最快」把 Manus 源加进候选列表
-- [ ] 清单里记录安装包 sha512，客户端校验（electron-updater 已内置校验）
+- [x] 建一个最小的 WebDev 静态站，暴露 `/updates/latest.yml`（站点已上线）
+- [x] 构建后上传 exe + blockmap 到 CDN，生成含绝对地址的 latest.yml 并发布（发版脚本一步完成）
+- [x] 客户端默认更新源切到 Manus 地址；「测速并选最快」把 Manus 源加进候选列表
+- [x] 清单里记录安装包 sha512，客户端校验（electron-updater 已内置校验）
+
+---
+
+# 落地结果（2026-11-14 已完成）
+
+| 项 | 地址 / 说明 |
+| --- | --- |
+| 更新清单 | `https://zhiyou-emy2c9va.manus.space/updates/latest.yml`（`cache-control: no-cache`） |
+| 下载页 | `https://zhiyou-emy2c9va.manus.space` |
+| 安装包（客户端用） | Manus CDN 绝对地址，实测 36–50 MB/s、支持 Range（206） |
+| 安装包（下载页用） | 站点同源 `/manus-storage/...`，文件名正确（原名 + 8 位哈希） |
+
+客户端默认更新源为内置「Manus 托管源」；用 GitHub 官方源且未自定义地址的老设置会自动迁移；
+自定义地址填的就是本站的，也归位为内置源。GitHub 侧只保留最新一个 Release。
+
+## 发版怎么跑
+
+```bash
+# 1. 升版本号 + 写 CHANGELOG → 提交 → 打 tag → CI 构建
+# 2. 下载产物
+gh release download vX.Y.Z -D /home/ubuntu/zhimail-release
+# 3. 生成清单与下载页（必须在站点目录下执行，--webdev 上传需要项目上下文）
+cd /home/ubuntu/zhiyou && node /home/ubuntu/zhimail/scripts/publish-update-feed.mjs \
+  --config /home/ubuntu/zhimail/update-feed.config.json
+# 4. 站点仓库提交推送 → 触发站点发布（webdev.config POST publish）
+# 5. 验证：清单 200 + no-cache、version/sha512/size、安装包 206
+# 6. GitHub 只留最新 Release：gh release delete <旧tag> --yes --cleanup-tag
+```
+
+配置在 `update-feed.config.json`（产品名、产物目录、站点目录、文件名模式、下载页文案）。
+脚本按「文件名:大小」缓存已上传地址，重复执行不会重复上传。
+
+## 这套做法已抽成可复用技能
+
+`/home/ubuntu/skills/manus-hosted-updates/SKILL.md`
+
+在其他项目里复用时，只要在会话里说「按 manus-hosted-updates 规范给这个项目接入在线更新」，
+或显式读取该 SKILL.md；也可以只把 `scripts/publish-update-feed.mjs` 与配置模板拷进项目使用。
+技能内含架构选型对比（CDN / 项目存储 / 静态站直放 / Cloud Computer / GitHub Releases 的实测数据与成本）、
+发版手册与已知坑排查。
+
+## 边界
+
+- CDN 的 `session_file` 地址不保证长期有效；失效就重传产物并改写清单，客户端无需改动。
+- 项目存储会 307 跳到签名 URL，浏览器可能忽略 `download` 属性，最终文件名带 8 位哈希；
+  要完全干净只能自建文件服务器（Cloud Computer，约 $10/月）。
+- 站点发布是独立动作：仓库提交只是检查点，必须再触发发布线上才会变。
