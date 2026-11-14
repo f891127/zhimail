@@ -249,8 +249,8 @@ export interface AppSettings {
   update: {
     autoCheck: boolean;
     autoDownload: boolean;
-    /** 更新源：github 使用 GitHub Releases，custom 使用自定义地址（可填镜像前缀） */
-    source: 'github' | 'custom';
+    /** 更新源：manus 使用 Manus 托管源（默认），github 使用 GitHub Releases，custom 使用自定义地址 */
+    source: 'github' | 'custom' | 'manus';
     customUrl: string;
   };
 }
@@ -273,6 +273,8 @@ export interface FeedSpeed {
   label: string;
   url: string;
   ok: boolean;
+  /** 内置源标记：manus 表示客户端内置的 Manus 托管源 */
+  builtin?: 'manus';
   kbps?: number;
   bytes?: number;
   error?: string;

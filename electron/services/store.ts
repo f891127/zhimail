@@ -96,7 +96,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   update: {
     autoCheck: true,
     autoDownload: false,
-    source: 'github',
+    // 默认走 Manus 托管源：更新清单在 Manus 静态站，安装包在 Manus CDN
+    source: 'manus',
     customUrl: '',
   },
   app: {
@@ -258,6 +259,13 @@ export class Store {
         this.state.briefs = (this.state.briefs ?? []).map((brief) =>
           brief.group && brief.group !== 'briefs' ? { ...brief, group: 'briefs' } : brief,
         );
+        // 旧版本默认走 GitHub Releases，国内直连常常超时：未自定义地址的一律迁移到 Manus 托管源
+        if (
+          this.state.settings.update?.source === 'github' &&
+          !(this.state.settings.update?.customUrl ?? '').trim()
+        ) {
+          this.state.settings.update = { ...this.state.settings.update, source: 'manus' };
+        }
       } catch (error) {
         console.error('[store] state.json 解析失败，使用空状态重建', error);
         this.state = emptyState();

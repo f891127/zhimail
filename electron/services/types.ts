@@ -423,12 +423,12 @@ export interface AppSettings {
   translate: { engine: 'auto' | 'llm' | 'builtin' };
   /** 备份与恢复 */
   backup: BackupSettings;
-  /** 在线更新（GitHub Releases） */
+  /** 在线更新（默认走 Manus 托管源，可切换 GitHub Releases 或自定义地址） */
   update: {
     autoCheck: boolean;
     autoDownload: boolean;
-    /** 更新源：github 走 GitHub Releases；custom 走自定义地址（可填镜像前缀） */
-    source: 'github' | 'custom';
+    /** 更新源：manus 走 Manus 托管源（默认）；github 走 GitHub Releases；custom 走自定义地址 */
+    source: 'github' | 'custom' | 'manus';
     /** 自定义更新源基础地址，需能访问到 latest.yml 与其列出的安装包 */
     customUrl: string;
   };

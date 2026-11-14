@@ -236,8 +236,11 @@ export function SettingsDialog() {
         store.pushToast({ type: 'error', title: '测速失败', message: '所有更新源都没测通，可换网络后重试' });
         return;
       }
+      // 内置 Manus 源按内置源保存，第三方镜像才落到自定义地址
       await saveUpdateSource(
-        { source: 'custom', customUrl: fastest.url },
+        fastest.builtin === 'manus'
+          ? { source: 'manus' }
+          : { source: 'custom', customUrl: fastest.url },
         `已切换到最快的源：${fastest.label}（${fastest.kbps} KB/s）`,
       );
     } catch (error) {
@@ -250,7 +253,7 @@ export function SettingsDialog() {
   // 更新源本地状态：改动后点击「保存更新源」才写入设置
   const [customUrl, setCustomUrl] = useState(settings?.update?.customUrl ?? '');
   // 直接读取已保存的设置，保证选中状态持续显示
-  const savedSource = settings?.update?.source ?? 'github';
+  const savedSource = settings?.update?.source ?? 'manus';
   const savedUrl = (settings?.update?.customUrl ?? '').trim();
   // 「测试」结果：只反映最近一次探测，不写进设置
   const [sourceTest, setSourceTest] = useState<{
@@ -290,7 +293,7 @@ export function SettingsDialog() {
 
   /** 立即保存更新源（选中即生效，不用再点保存按钮） */
   const saveUpdateSource = async (
-    next: { source: 'github' | 'custom'; customUrl?: string },
+    next: { source: 'github' | 'custom' | 'manus'; customUrl?: string },
     hint?: string,
   ) => {
     const url = (next.customUrl ?? customUrl).trim();
@@ -309,7 +312,13 @@ export function SettingsDialog() {
     store.pushToast({
       type: 'success',
       title: '更新源已保存',
-      message: hint ?? (next.source === 'custom' ? '已切换为镜像 / 自定义地址' : '已切换为 GitHub 官方源'),
+      message:
+        hint ??
+        (next.source === 'custom'
+          ? '已切换为镜像 / 自定义地址'
+          : next.source === 'manus'
+            ? '已切换为 Manus 托管源'
+            : '已切换为 GitHub 官方源'),
     });
   };
 
@@ -1822,6 +1831,14 @@ export function SettingsDialog() {
                   <div className="flex flex-wrap gap-1.5">
                     <button
                       type="button"
+                      className={savedSource === 'manus' ? 'primary-btn' : 'ghost-btn'}
+                      onClick={() => void saveUpdateSource({ source: 'manus' })}
+                    >
+                      {savedSource === 'manus' && <Icon name="check" size={12} />}
+                      Manus 托管源（推荐）
+                    </button>
+                    <button
+                      type="button"
                       className={savedSource === 'github' ? 'primary-btn' : 'ghost-btn'}
                       onClick={() => void saveUpdateSource({ source: 'github' })}
                     >
@@ -1837,6 +1854,9 @@ export function SettingsDialog() {
                       镜像 / 自定义地址
                     </button>
                   </div>
+                  <p className="mt-1.5 text-[11px] leading-5 text-shell-faint">
+                    「Manus 托管源」的更新清单与安装包都由 Manus 托管（GitHub 仅作为代码仓库），国内直连更稳定，也是默认选项；GitHub 官方与第三方镜像作为备用。
+                  </p>
                   {savedSource === 'custom' && (
                     <div className="mt-2">
                       <input
@@ -1890,7 +1910,12 @@ export function SettingsDialog() {
                       {speedTesting ? '测速中…' : '测速并选最快'}
                     </button>
                     <span className="text-[11px] text-shell-faint">
-                      当前：{savedSource === 'custom' ? describeSource(savedUrl) : 'GitHub 官方'}
+                      当前：
+                      {savedSource === 'custom'
+                        ? describeSource(savedUrl)
+                        : savedSource === 'manus'
+                          ? 'Manus 托管源（内置地址）'
+                          : 'GitHub 官方'}
                     </span>
                   </div>
                   {speedRows && (

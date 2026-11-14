@@ -75,7 +75,7 @@ const emptySettings: AppSettings = {
   backup: { autoEnabled: false, directory: '', keep: 7, includeSecrets: true },
   sync: { days: 30, limit: 500 },
   translate: { engine: 'auto' },
-  update: { autoCheck: true, autoDownload: false, source: 'github', customUrl: '' },
+  update: { autoCheck: true, autoDownload: false, source: 'manus', customUrl: '' },
 };
 
 const emptyInfo: AppInfo = {

@@ -11,7 +11,13 @@ import { store } from './store';
 
 export const UPDATE_OWNER = 'f891127';
 export const UPDATE_REPO = 'zhimail';
-
+/** Manus 托管更新源：清单（latest.yml）在 Manus 静态站，安装包在 Manus CDN */
+export const MANUS_UPDATE_BASE = 'https://zhiyou-emy2c9va.manus.space/updates';
+export const MANUS_UPDATE_LABEL = 'Manus 托管源';
+/** 清单里的安装包地址可能是绝对地址（Manus CDN），也可能是相对文件名 */
+function resolveArtifactUrl(base: string, file: string): string {
+  return /^https?:\/\//i.test(file) ? file : `${base}/${encodeURIComponent(file)}`;
+}
 export type UpdatePhase =
   | 'idle'
   | 'checking'
@@ -117,6 +123,10 @@ export function resolveUpdateFeed(): Record<string, unknown> {
       provider: 'generic',
       url: customUrl.endsWith('/') ? customUrl : `${customUrl}/`,
     };
+  }
+  // Manus 托管源：与自定义源同为 generic，只是地址由客户端内置
+  if (settings?.source === 'manus') {
+    return { provider: 'generic', url: `${MANUS_UPDATE_BASE}/` };
   }
   return { provider: 'github', owner: UPDATE_OWNER, repo: UPDATE_REPO };
 }
@@ -466,7 +476,7 @@ export async function testUpdateSource(rawUrl: string): Promise<UpdateSourceTest
     let installerOk: boolean | undefined;
     if (installer) {
       try {
-        const head = await withTimeout(`${base}/${installer}`, 15_000, 'HEAD');
+        const head = await withTimeout(resolveArtifactUrl(base, installer), 15_000, 'HEAD');
         installerOk = head.ok;
       } catch {
         installerOk = false;
@@ -500,7 +510,8 @@ export async function testUpdateSource(rawUrl: string): Promise<UpdateSourceTest
 /* ------------------------- 更新源测速 ------------------------- */
 
 /** 各更新源（镜像）候选：都以同一份 GitHub Release 资产为源 */
-const SPEED_BASES = [
+const SPEED_BASES: { label: string; base: string; builtin?: 'manus' }[] = [
+  { label: MANUS_UPDATE_LABEL, base: MANUS_UPDATE_BASE, builtin: 'manus' },
   { label: 'GitHub 官方', base: 'https://github.com/f891127/zhimail/releases/latest/download' },
   {
     label: 'gh-proxy.com',
@@ -520,6 +531,8 @@ export interface FeedSpeed {
   label: string;
   url: string;
   ok: boolean;
+  /** 内置源标记：manus 表示这是客户端内置的 Manus 托管源，可直接按内置源保存 */
+  builtin?: 'manus';
   /** 实测下载速度 KB/s */
   kbps?: number;
   /** 本次测速实际收到的字节数 */
@@ -582,14 +595,22 @@ export async function speedTestFeeds(): Promise<FeedSpeed[]> {
         const text = await manifest.text();
         const file = /path:\s*(\S+)/.exec(text)?.[1];
         if (!file) throw new Error('清单里没有安装包文件名');
-        const measured = await measureThroughput(`${item.base}/${encodeURIComponent(file)}`);
+        const measured = await measureThroughput(resolveArtifactUrl(item.base, file));
         if (!measured.bytes) throw new Error('没有收到数据');
-        return { label: item.label, url: item.base, ok: true, kbps: measured.kbps, bytes: measured.bytes };
+        return {
+          label: item.label,
+          url: item.base,
+          builtin: item.builtin,
+          ok: true,
+          kbps: measured.kbps,
+          bytes: measured.bytes,
+        };
       } catch (error) {
         const raw = String((error as Error).message ?? error);
         return {
           label: item.label,
           url: item.base,
+          builtin: item.builtin,
           ok: false,
           error: raw.includes('aborted') ? '测速超时' : raw.slice(0, 120),
         };
