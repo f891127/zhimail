@@ -200,6 +200,8 @@ interface State {
   /** 更新弹窗（帮助 → 检查更新 / 自动发现新版本时弹出） */
   updateDialogOpen: boolean;
   openUpdateDialog: () => void;
+  /** 帮助 → 检查更新：无论弹窗是否被设置页接管，都真实发起一次检查 */
+  checkUpdateFromMenu: () => Promise<void>;
   closeUpdateDialog: () => void;
   /** 一键收取全部真实账户 */
   syncAll: () => Promise<void>;
@@ -1189,6 +1191,12 @@ export const useAppStore = create<State>((set, get) => ({
   setTranslationVisible: (visible) => set({ translationVisible: visible }),
 
   openUpdateDialog: () => set({ updateDialogOpen: true }),
+  checkUpdateFromMenu: async () => {
+    // 设置页已经停在「在线更新」时弹窗会被接管（不显示），此时就在那一页检查，不再弹窗
+    const { settingsOpen, settingsTab } = get();
+    if (!(settingsOpen && settingsTab === 'update')) get().openUpdateDialog();
+    await get().checkUpdate();
+  },
   closeUpdateDialog: () => set({ updateDialogOpen: false }),
   syncAll: async () => {
     const accounts = get().accounts.filter((account) => !account.demo);
@@ -1211,8 +1219,12 @@ export const useAppStore = create<State>((set, get) => ({
     }
     const state = await api.update.check();
     set({ updateState: state });
+    // 更新弹窗开着时结果就显示在弹窗里，不再额外弹 toast（否则同一个结论提示两遍）
+    const dialogOpen = get().updateDialogOpen;
     if (state.phase === 'not-available') {
-      get().pushToast({ type: 'success', title: '已是最新版本', message: `当前版本 v${state.currentVersion}` });
+      if (!dialogOpen) {
+        get().pushToast({ type: 'success', title: '已是最新版本', message: `当前版本 v${state.currentVersion}` });
+      }
     } else if (state.phase === 'available') {
       get().pushToast({
         type: 'info',
@@ -1222,7 +1234,7 @@ export const useAppStore = create<State>((set, get) => ({
     } else if (state.phase === 'error') {
       get().pushToast({ type: 'error', title: '检查更新失败', message: state.error });
     } else if (state.phase === 'unsupported') {
-      get().pushToast({ type: 'info', title: '当前为开发模式', message: state.error });
+      if (!dialogOpen) get().pushToast({ type: 'info', title: '当前为开发模式', message: state.error });
     }
   },
 

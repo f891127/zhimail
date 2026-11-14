@@ -205,7 +205,7 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
         tick();
         return true;
       })()`,
-      waitMs: 1800,
+      waitMs: 3000,
     },
     {
       name: '01e-multi-select',

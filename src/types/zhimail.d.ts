@@ -295,6 +295,8 @@ export interface UpdateState {
   fullDownloadFallback?: boolean;
   downloadSize?: number;
   canCheck: boolean;
+  /** 最近一次检查完成的时间戳（毫秒） */
+  checkedAt?: number;
 }
 
 export interface AnalysisStats {

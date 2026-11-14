@@ -49,6 +49,8 @@ export interface UpdateState {
   /** 本次更新安装包体积（字节），用于界面显示「整包约 xx MB」 */
   downloadSize?: number;
   canCheck: boolean;
+  /** 最近一次检查完成的时间戳：界面据此判断结果是否已经过期，过期就重新检查 */
+  checkedAt?: number;
 }
 
 /** 便携版由 electron-builder 注入 PORTABLE_EXECUTABLE_DIR，此时无法静默替换自身文件 */
@@ -250,8 +252,9 @@ async function runCheckForUpdates(): Promise<UpdateState> {
   if (!app.isPackaged) {
     setState({
       phase: 'unsupported',
-      error: '开发模式不检查更新；安装版会从 GitHub Releases 检查新版本。',
+      error: '开发模式不检查更新；安装版会从 Manus 更新源检查新版本。',
       canCheck: false,
+      checkedAt: Date.now(),
     });
     return state;
   }
@@ -273,6 +276,8 @@ async function runCheckForUpdates(): Promise<UpdateState> {
           : raw.slice(0, 400),
     });
   }
+  // 记录本次检查的时间：帮助菜单里的「检查更新」据此判断要不要重新发起一次
+  setState({ checkedAt: Date.now() });
   return state;
 }
 

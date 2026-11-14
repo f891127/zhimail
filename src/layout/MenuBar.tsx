@@ -168,7 +168,7 @@ export function MenuBar() {
     帮助: [
       {
         label: tt('检查更新…'),
-        onClick: () => store.openUpdateDialog(),
+        onClick: () => void store.checkUpdateFromMenu(),
       },
       { label: tt('版本更新日志'), onClick: () => store.openChangelog() },
       { divider: true, label: tt('') },

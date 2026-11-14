@@ -26,11 +26,21 @@ export function UpdateDialog() {
   const suppressed = settingsOpen && settingsTab === 'update';
   const [notesOpen, setNotesOpen] = useState(false);
 
-  // 打开时若还没查过，主动查一次（检查在主进程里是单飞的，重复触发也只会执行一次）
+  // 打开时主动查一次（检查在主进程里是单飞的，重复触发也只会执行一次）。
+  // 判断依据不能只看 phase：应用启动 8 秒后会自动查一次，之后状态一直停在「已是最新」，
+  // 从「帮助 → 检查更新」进来就永远看到旧结果。这里改成按上次检查的时间判断，
+  // 超过 60 秒（或从未查过）就重新查一次。
   useEffect(() => {
-    if (updateDialogOpen && !suppressed && (!updateState || updateState.phase === 'idle')) {
-      void checkUpdate();
-    }
+    if (!updateDialogOpen || suppressed) return;
+    const phase = updateState?.phase;
+    const fresh = typeof updateState?.checkedAt === 'number' && Date.now() - updateState.checkedAt < 60_000;
+    const busy =
+      phase === 'downloading' ||
+      phase === 'downloaded' ||
+      phase === 'installing' ||
+      phase === 'checking' ||
+      phase === 'unsupported';
+    if (!busy && (!updateState || phase === 'idle' || !fresh)) void checkUpdate();
   }, [updateDialogOpen, suppressed, updateState, checkUpdate]);
 
   // 被设置页接管时顺手关掉弹窗状态，避免用户关掉设置后弹窗又冒出来
