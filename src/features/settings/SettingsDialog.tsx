@@ -12,7 +12,6 @@ import type {
   BackupOverview,
   BriefKind,
   BriefSchedule,
-  FeedSpeed,
 } from '@/types/zhimail';
 import { fileSize } from '@/lib/format';
 import {
@@ -27,8 +26,6 @@ import { DEFAULT_TOOLBAR_ACTIONS, TOOLBAR_ACTION_GROUPS, TOOLBAR_ACTIONS } from 
 
 type TabId = 'account' | 'ai' | 'ui' | 'brief' | 'data' | 'update' | 'about' | 'app';
 
-/** 常用 GitHub 加速镜像：均为第三方服务，仅作为快捷填入 */
-
 /** 字节数转可读容量 */
 function formatBytes(bytes: number): string {
   if (!bytes) return '0 B';
@@ -38,36 +35,8 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
-/** 更新源展示文案：能识别常见镜像，否则显示主机名 */
-function describeSource(url: string): string {
-  if (!url) return '自定义地址（未填写）';
-  const mirror = UPDATE_MIRRORS.find((item) => item.url === url);
-  if (mirror) return `镜像 ${mirror.label}`;
-  try {
-    return `自定义地址 ${new URL(url).host}`;
-  } catch {
-    return '自定义地址';
-  }
-}
-
-const UPDATE_MIRRORS = [
-  {
-    label: 'ghproxy.net',
-    url: 'https://ghproxy.net/https://github.com/f891127/zhimail/releases/latest/download',
-  },
-  {
-    label: 'gh-proxy.com',
-    url: 'https://gh-proxy.com/https://github.com/f891127/zhimail/releases/latest/download',
-  },
-  {
-    label: 'ghfast.top',
-    url: 'https://ghfast.top/https://github.com/f891127/zhimail/releases/latest/download',
-  },
-  {
-    label: 'GitHub 直连（不走 API）',
-    url: 'https://github.com/f891127/zhimail/releases/latest/download',
-  },
-];
+/** 内置 Manus 更新源（清单目录）：只展示，不可改 */
+const MANUS_FEED_DIR = 'https://zhiyou-emy2c9va.manus.space/updates';
 
 const TABS: { id: TabId; label: string; icon: IconName }[] = [
   { id: 'account', label: '邮箱账户', icon: 'user' },
@@ -222,39 +191,6 @@ export function SettingsDialog() {
   const [backupInfo, setBackupInfo] = useState<BackupOverview | null>(null);
   const [scheduleBusy, setScheduleBusy] = useState<string | null>(null);
 
-  // 更新源测速：一次性测完所有镜像，直接切到最快那个
-  const [speedTesting, setSpeedTesting] = useState(false);
-  const [speedRows, setSpeedRows] = useState<FeedSpeed[] | null>(null);
-  const runSpeedTest = async () => {
-    setSpeedTesting(true);
-    setSpeedRows(null);
-    try {
-      const rows = await api.update.speedTest();
-      setSpeedRows(rows);
-      const fastest = rows.find((row) => row.ok && (row.kbps ?? 0) > 0);
-      if (!fastest) {
-        store.pushToast({ type: 'error', title: '测速失败', message: '所有更新源都没测通，可换网络后重试' });
-        return;
-      }
-      // 内置 Manus 源按内置源保存，第三方镜像才落到自定义地址
-      await saveUpdateSource(
-        fastest.builtin === 'manus'
-          ? { source: 'manus' }
-          : { source: 'custom', customUrl: fastest.url },
-        `已切换到最快的源：${fastest.label}（${fastest.kbps} KB/s）`,
-      );
-    } catch (error) {
-      store.pushToast({ type: 'error', title: '测速失败', message: (error as Error).message });
-    } finally {
-      setSpeedTesting(false);
-    }
-  };
-
-  // 更新源本地状态：改动后点击「保存更新源」才写入设置
-  const [customUrl, setCustomUrl] = useState(settings?.update?.customUrl ?? '');
-  // 直接读取已保存的设置，保证选中状态持续显示
-  const savedSource = settings?.update?.source ?? 'manus';
-  const savedUrl = (settings?.update?.customUrl ?? '').trim();
   // 「测试」结果：只反映最近一次探测，不写进设置
   const [sourceTest, setSourceTest] = useState<{
     ok: boolean;
@@ -267,65 +203,18 @@ export function SettingsDialog() {
   } | null>(null);
   const [testingSource, setTestingSource] = useState(false);
 
-  useEffect(() => {
-    setCustomUrl(settings?.update?.customUrl ?? '');
-  }, [settings?.update?.customUrl]);
-
-  /** 测试当前输入的更新源能否取到 latest.yml */
+  /** 测试内置更新源能否取到 latest.yml 与安装包 */
   const testUpdateSource = async () => {
-    const target = (customUrl || savedUrl || '').trim();
     setTestingSource(true);
     setSourceTest(null);
     try {
-      const result = await api.update.testSource(target);
+      const result = await api.update.testSource('');
       setSourceTest(result);
     } catch (error) {
-      setSourceTest({
-        ok: false,
-        feedUrl: target,
-        latencyMs: 0,
-        error: (error as Error).message,
-      });
+      setSourceTest({ ok: false, feedUrl: MANUS_FEED_DIR, latencyMs: 0, error: (error as Error).message });
     } finally {
       setTestingSource(false);
     }
-  };
-
-  /** 立即保存更新源（选中即生效，不用再点保存按钮） */
-  const saveUpdateSource = async (
-    next: { source: 'github' | 'custom' | 'manus'; customUrl?: string },
-    hint?: string,
-  ) => {
-    const url = (next.customUrl ?? customUrl).trim();
-    const downloading = updateState?.phase === 'downloading';
-    await store.updateSettings({
-      update: { ...(settings?.update ?? {}), source: next.source, customUrl: url },
-    });
-    if (downloading) {
-      store.pushToast({
-        type: 'info',
-        title: '更新源已记录',
-        message: '当前正在下载更新，新源会在这次下载结束后生效（下载不会被打断）。',
-      });
-    }
-    if (next.customUrl !== undefined) setCustomUrl(url);
-    store.pushToast({
-      type: 'success',
-      title: '更新源已保存',
-      message:
-        hint ??
-        (next.source === 'custom'
-          ? '已切换为镜像 / 自定义地址'
-          : next.source === 'manus'
-            ? '已切换为 Manus 托管源'
-            : '已切换为 GitHub 官方源'),
-    });
-  };
-
-  /** 选择镜像：填入地址并立即保存 */
-  const chooseMirror = async (mirror: { label: string; url: string }) => {
-    setCustomUrl(mirror.url);
-    await saveUpdateSource({ source: 'custom', customUrl: mirror.url }, `已切换到镜像 ${mirror.label}`);
   };
 
   // 数据目录占用
@@ -1834,71 +1723,11 @@ export function SettingsDialog() {
 
                 <div className="rounded border border-shell-lineSoft bg-[#fafbfc] px-3 py-2.5">
                   <div className="mb-1.5 text-xs font-semibold text-shell-text">更新源</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      className={savedSource === 'manus' ? 'primary-btn' : 'ghost-btn'}
-                      onClick={() => void saveUpdateSource({ source: 'manus' })}
-                    >
-                      {savedSource === 'manus' && <Icon name="check" size={12} />}
-                      Manus 托管源（推荐）
-                    </button>
-                    <button
-                      type="button"
-                      className={savedSource === 'github' ? 'primary-btn' : 'ghost-btn'}
-                      onClick={() => void saveUpdateSource({ source: 'github' })}
-                    >
-                      {savedSource === 'github' && <Icon name="check" size={12} />}
-                      GitHub 官方
-                    </button>
-                    <button
-                      type="button"
-                      className={savedSource === 'custom' ? 'primary-btn' : 'ghost-btn'}
-                      onClick={() => void saveUpdateSource({ source: 'custom' })}
-                    >
-                      {savedSource === 'custom' && <Icon name="check" size={12} />}
-                      镜像 / 自定义地址
-                    </button>
-                  </div>
-                  <p className="mt-1.5 text-[11px] leading-5 text-shell-faint">
-                    「Manus 托管源」的更新清单与安装包都由 Manus 托管（GitHub 仅作为代码仓库），国内直连更稳定，也是默认选项；GitHub 官方与第三方镜像作为备用。
-                  </p>
-                  {savedSource === 'custom' && (
-                    <div className="mt-2">
-                      <input
-                        value={customUrl}
-                        onChange={(event) => setCustomUrl(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') void saveUpdateSource({ source: 'custom' });
-                        }}
-                        placeholder="https://ghproxy.net/https://github.com/f891127/zhimail/releases/latest/download"
-                        className="w-full rounded border border-shell-line bg-white px-2 py-1 text-[11px] text-shell-text outline-none focus:border-brand-400"
-                      />
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {UPDATE_MIRRORS.map((mirror) => {
-                          const active = savedSource === 'custom' && savedUrl === mirror.url;
-                          return (
-                            <button
-                              key={mirror.label}
-                              type="button"
-                              className={active ? 'primary-btn' : 'ghost-btn'}
-                              onClick={() => void chooseMirror(mirror)}
-                            >
-                              {active && <Icon name="check" size={12} />}
-                              {mirror.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <p className="mt-1.5 text-[11px] leading-5 text-shell-faint">
-                        点一下镜像即生效（会自动保存）；也可以手动填写地址后按回车或点「保存更新源」。该地址需要能直接访问到 latest.yml 与安装包，镜像站点为第三方服务，可用性可能变化，可先点「检查更新」验证。
-                      </p>
-                    </div>
-                  )}
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <button type="button" className="ghost-btn" onClick={() => void saveUpdateSource({ source: savedSource })}>
-                      保存更新源
-                    </button>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1 rounded border border-brand-200 bg-brand-50 px-2 py-1 text-[11px] font-semibold text-brand-700">
+                      <Icon name="check" size={12} />
+                      Manus 托管源
+                    </span>
                     <button
                       type="button"
                       className="ghost-btn"
@@ -1907,39 +1736,11 @@ export function SettingsDialog() {
                     >
                       {testingSource ? '测试中…' : '测试'}
                     </button>
-                    <button
-                      type="button"
-                      className="primary-btn"
-                      disabled={speedTesting}
-                      onClick={() => void runSpeedTest()}
-                    >
-                      {speedTesting ? '测速中…' : '测速并选最快'}
-                    </button>
-                    <span className="text-[11px] text-shell-faint">
-                      当前：
-                      {savedSource === 'custom'
-                        ? describeSource(savedUrl)
-                        : savedSource === 'manus'
-                          ? 'Manus 托管源（内置地址）'
-                          : 'GitHub 官方'}
-                    </span>
+                    <span className="break-all text-[11px] text-shell-faint">{MANUS_FEED_DIR}</span>
                   </div>
-                  {speedRows && (
-                    <div className="mt-2 rounded border border-shell-lineSoft bg-[#fafbfc] px-2.5 py-2 text-[11px] leading-5">
-                      <div className="mb-1 font-semibold text-shell-sub">各更新源实测速度（取前 3MB 估算）</div>
-                      {speedRows.map((row) => (
-                        <div key={row.url} className="flex items-center justify-between gap-2">
-                          <span className="truncate">
-                            {row.label}
-                            {row.url === savedUrl && <span className="ml-1 text-brand-600">（当前）</span>}
-                          </span>
-                          <span className={row.ok ? 'text-emerald-700' : 'text-rose-600'}>
-                            {row.ok ? `${row.kbps} KB/s` : row.error}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <p className="mt-1.5 text-[11px] leading-5 text-shell-faint">
+                    更新清单与安装包都由 Manus 托管（GitHub 仅作为代码仓库），地址已内置，无需配置。
+                  </p>
                   {sourceTest && (
                     <div
                       className={`mt-2 rounded border px-2.5 py-2 text-[11px] leading-5 ${
@@ -1954,7 +1755,7 @@ export function SettingsDialog() {
                           {sourceTest.ok ? (
                             <>
                               可访问：最新版本 v{sourceTest.version}，耗时 {sourceTest.latencyMs} ms
-                              {sourceTest.installerOk === false && '；安装包暂不可取（镜像可能未缓存）'}
+                              {sourceTest.installerOk === false && '；安装包暂不可取'}
                               {sourceTest.installerOk && '；安装包可下载'}
                             </>
                           ) : (
@@ -1970,8 +1771,8 @@ export function SettingsDialog() {
                   )}
                 </div>
                 <p className="text-[11px] leading-5 text-shell-faint">
-                  更新清单与安装包默认由 Manus 托管（GitHub 仅作为代码仓库），客户端通过 latest.yml 比对版本后下载安装包并校验 SHA-512。
-                  若提示连接超时，可切到 GitHub 官方源或第三方镜像后重试。
+                  客户端通过 latest.yml 比对版本后下载安装包并校验 SHA-512；更新源固定为内置的 Manus 托管源，无法修改。
+                  若提示连接超时，请检查网络或代理后重试。
                 </p>
               </div>
             )}

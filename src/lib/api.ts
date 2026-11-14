@@ -241,7 +241,6 @@ const mockApi: ZhimailApi = {
       latencyMs: 0,
       error: '浏览器预览模式无法测试更新源',
     }),
-    speedTest: async () => [],
     openRelease: async () => false,
   },
   on: () => () => undefined,

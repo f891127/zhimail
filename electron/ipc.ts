@@ -41,7 +41,6 @@ import {
   getUpdateState,
   installUpdate,
   openDownloadedInstaller,
-  speedTestFeeds,
   testUpdateSource,
   DOWNLOAD_PAGE_URL,
 } from './services/updater';
@@ -1101,7 +1100,6 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('update/state', () => getUpdateState());
-  ipcMain.handle('update/speedTest', () => speedTestFeeds());
   ipcMain.handle('update/check', async () => checkForUpdates());
   ipcMain.handle('update/download', async () => downloadUpdate());
   ipcMain.handle('update/testSource', (_event, url: string) => testUpdateSource(url))

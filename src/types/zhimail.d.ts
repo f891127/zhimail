@@ -269,17 +269,6 @@ export interface BalanceInfo {
   fetchedAt: number;
 }
 
-export interface FeedSpeed {
-  label: string;
-  url: string;
-  ok: boolean;
-  /** 内置源标记：manus 表示客户端内置的 Manus 托管源 */
-  builtin?: 'manus';
-  kbps?: number;
-  bytes?: number;
-  error?: string;
-}
-
 export interface UpdateState {
   phase:
     | 'idle'
@@ -661,7 +650,6 @@ export interface ZhimailApi {
       hint?: string;
     }>;
     /** 各更新源（镜像）实测速度，按快慢排序 */
-    speedTest: () => Promise<FeedSpeed[]>;
     openInstaller: () => Promise<{ ok: boolean; path?: string; error?: string }>;
     openRelease: () => Promise<boolean>;
   };
