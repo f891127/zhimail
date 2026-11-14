@@ -548,6 +548,29 @@ async function runScreenshotMode(window: BrowserWindow): Promise<void> {
       waitMs: 5200,
     },
 
+    {
+      // 走真实交互路径：打开设置后点侧边栏「数据与备份」，验证占用统计不会一直停在「统计中」
+      name: '08-settings-data',
+      script: `(() => {
+        window.__zhimailDev?.openSettings?.('account');
+        setTimeout(() => {
+          const btn = Array.from(document.querySelectorAll('button')).find(
+            (el) => (el.textContent || '').trim() === '数据与备份',
+          );
+          if (btn) btn.click();
+        }, 600);
+        return true;
+      })()`,
+      waitMs: 5000,
+    },
+    {
+      name: '08-settings-update',
+      script: `(() => {
+        window.__zhimailDev?.openSettings?.('update');
+        return true;
+      })()`,
+      waitMs: 2200,
+    },
   ];
 
   for (const view of views) {

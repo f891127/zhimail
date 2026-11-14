@@ -348,10 +348,6 @@ export function SettingsDialog() {
     }
   };
   const activeTab = store.settingsTab;
-  useEffect(() => {
-    if (store.settingsOpen && activeTab === 'data') void loadDataSize();
-  }, [store.settingsOpen, activeTab]);
-
   // 运行日志位置（白屏 / 闪退排查用）
   const [logPath, setLogPath] = useState('');
   useEffect(() => {
@@ -405,6 +401,16 @@ export function SettingsDialog() {
     if (settingsOpen) setTab(settingsTab as TabId);
   }, [settingsOpen, settingsTab]);
 
+  // 打开「数据与备份」页时统计占用并读取备份概览。
+  // 这里必须用界面上的本地页签 tab：侧边栏切换只改本地 tab，不会同步回 store.settingsTab，
+  // 早先按 store.settingsTab 判断会导致切到该页后一直停在「统计中…」。
+  useEffect(() => {
+    if (settingsOpen && tab === 'data') {
+      void loadDataSize();
+      void loadBackupInfo();
+    }
+  }, [settingsOpen, tab]);
+
   useEffect(() => {
     if (!settings) return;
     setAiForm({
@@ -419,10 +425,6 @@ export function SettingsDialog() {
   }, [settings]);
 
   // 打开「数据与备份」页时读取备份概览（必须放在提前返回之前，避免 hooks 顺序变化）
-  useEffect(() => {
-    if (settingsOpen && settingsTab === 'data') void loadBackupInfo();
-  }, [settingsOpen, settingsTab]);
-
   if (!settingsOpen) return null;
 
   const providers = info?.aiProviders ?? [];
@@ -731,7 +733,11 @@ export function SettingsDialog() {
             <button
               key={item.id}
               type="button"
-              onClick={() => setTab(item.id)}
+              onClick={() => {
+                setTab(item.id);
+                // 同步回 store，保证「下次打开设置停在哪个页签」以及依赖 store.settingsTab 的逻辑一致
+                store.openSettings(item.id);
+              }}
               className={`flex items-center gap-2 px-3 py-[7px] text-left text-xs transition-colors duration-120 ${
                 tab === item.id ? 'bg-brand-500 text-white' : 'text-shell-text hover:bg-black/[0.045]'
               }`}

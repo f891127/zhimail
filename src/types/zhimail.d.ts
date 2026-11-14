@@ -682,6 +682,7 @@ declare global {
     __zhimailDev?: {
       setSkin?: (id: string) => void;
       showUpdateDialog?: () => void;
+      openSettings?: (tab?: string) => void;
       selectMulti?: (count?: number) => void;
     selectBySubject?: (keyword: string) => void;
       showMail?: () => void;

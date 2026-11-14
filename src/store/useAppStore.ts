@@ -130,7 +130,7 @@ interface State {
   changelogOpen: boolean;
   changelogAuto: boolean;
   changelogHighlight: string | null;
-  settingsTab: 'account' | 'ai' | 'ui' | 'brief' | 'data' | 'update' | 'about';
+  settingsTab: 'account' | 'ai' | 'app' | 'ui' | 'brief' | 'data' | 'update' | 'about';
   /** AI 助手面板是否最大化（最大化时其它区域暂时隐藏） */
   aiPanelMaximized: boolean;
   /** 模型账户余额（状态栏展示） */
@@ -459,6 +459,9 @@ export const useAppStore = create<State>((set, get) => ({
 
     // 截图与调试钩子
     window.__zhimailDev = {
+      /** 截图用：打开设置对话框并停在指定页签 */
+      openSettings: (tab?: string) =>
+        set({ settingsOpen: true, settingsTab: (tab as State['settingsTab']) ?? 'account' }),
       showMail: () => {
         // 截图时固定回默认皮肤，避免上一次视图切换留下的皮肤影响主界面
         const settings = get().settings;
