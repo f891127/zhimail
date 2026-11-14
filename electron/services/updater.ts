@@ -116,7 +116,7 @@ function normalizeNotes(notes: unknown): string {
   return '';
 }
 
-/** 解析当前生效的更新源；custom 时使用通用源（可填镜像前缀） */
+/** 解析当前生效的更新源（固定为内置的 Manus 托管源） */
 export function resolveUpdateFeed(): Record<string, unknown> {
   // 更新源只有一种：内置的 Manus 托管源。
   // 历史版本里的 GitHub 官方源 / 自定义镜像地址一律忽略（设置里也不再有可选项）。
@@ -203,7 +203,7 @@ export function initUpdater(): void {
       phase: 'error',
       error:
         kind === 'network'
-          ? `无法连接更新服务器（${raw.slice(0, 120)}）。常见原因是网络无法直连 GitHub，可在下方把更新源切换为镜像地址后重试。`
+          ? `无法连接更新服务器（${raw.slice(0, 120)}）。请检查网络或代理后重试。`
           : raw.slice(0, 400),
     });
     // 下载失败后把挂起的更新源改动应用上，用户换源重试才能真的换到新源
@@ -269,7 +269,7 @@ async function runCheckForUpdates(): Promise<UpdateState> {
       phase: 'error',
       error:
         kind === 'network'
-          ? `无法连接更新服务器（${raw.slice(0, 120)}）。常见原因是网络无法直连 GitHub，可在下方把更新源切换为镜像地址后重试。`
+          ? `无法连接更新服务器（${raw.slice(0, 120)}）。请检查网络或代理后重试。`
           : raw.slice(0, 400),
     });
   }
@@ -448,7 +448,7 @@ export async function testUpdateSource(rawUrl?: string): Promise<UpdateSourceTes
         feedUrl,
         latencyMs,
         error: `地址可访问，但该路径下没有 latest.yml（HTTP 404）`,
-        hint: '确认地址指向 releases/latest/download 这一级；镜像请保留完整的 GitHub 原始地址。',
+        hint: '确认该地址下确实存在 latest.yml。',
       };
     }
     if (!response.ok) {
@@ -463,7 +463,7 @@ export async function testUpdateSource(rawUrl?: string): Promise<UpdateSourceTes
         feedUrl,
         latencyMs,
         error: '返回内容不是有效的 latest.yml',
-        hint: '这个地址可能被重定向到 HTML 页面（例如镜像的登录页或错误页）。',
+        hint: '该地址可能被重定向到 HTML 页面（例如登录页或错误页）。',
       };
     }
     let installerOk: boolean | undefined;
@@ -484,7 +484,7 @@ export async function testUpdateSource(rawUrl?: string): Promise<UpdateSourceTes
       installerOk,
       hint:
         installerOk === false
-          ? '清单可读，但安装包暂时取不到（镜像可能尚未缓存），正式更新时可能失败。'
+          ? '清单可读，但安装包暂时取不到（可能还没上传完），正式更新时可能失败。'
           : undefined,
     };
   } catch (error) {

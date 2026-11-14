@@ -649,7 +649,6 @@ export interface ZhimailApi {
       error?: string;
       hint?: string;
     }>;
-    /** 各更新源（镜像）实测速度，按快慢排序 */
     openInstaller: () => Promise<{ ok: boolean; path?: string; error?: string }>;
     openRelease: () => Promise<boolean>;
   };
