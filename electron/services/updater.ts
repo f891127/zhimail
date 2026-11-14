@@ -60,13 +60,15 @@ function detectInstallMode(): 'installed' | 'portable' | 'dev' {
 
 const installMode = detectInstallMode();
 export const RELEASE_URL = `https://github.com/${UPDATE_OWNER}/${UPDATE_REPO}/releases/latest`;
+/** Manus 下载与更新站点：给用户看的「下载页」入口 */
+export const DOWNLOAD_PAGE_URL = 'https://zhiyou-emy2c9va.manus.space';
 
 let state: UpdateState = {
   phase: 'idle',
   currentVersion: app.getVersion(),
   installMode,
   canAutoInstall: installMode === 'installed',
-  releaseUrl: RELEASE_URL,
+  releaseUrl: DOWNLOAD_PAGE_URL,
   canCheck: app.isPackaged,
 };
 

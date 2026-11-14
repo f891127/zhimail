@@ -79,7 +79,7 @@ export function SystemSettingsPage() {
           <Checkbox
             checked={store.settings?.update?.autoCheck ?? true}
             label="软件自动更新"
-            hint="(启动后自动检查 GitHub Releases)"
+            hint="(启动后自动检查新版本，默认走 Manus 托管源)"
             onChange={(value) =>
               void store.updateSettings({ update: { ...store.settings?.update, autoCheck: value } } as never)
             }

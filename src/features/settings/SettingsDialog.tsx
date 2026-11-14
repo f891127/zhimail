@@ -1780,7 +1780,7 @@ export function SettingsDialog() {
                   {updateState?.phase === 'downloaded' && !updateState.canAutoInstall && (
                     <button type="button" className="ghost-btn" onClick={() => void api.update.openRelease()}>
                       <Icon name="external" size={12} />
-                      打开发布页下载新版
+                      打开下载页下载新版
                     </button>
                   )}
                   {updateState?.phase === 'installing' && (
@@ -1964,8 +1964,8 @@ export function SettingsDialog() {
                   )}
                 </div>
                 <p className="text-[11px] leading-5 text-shell-faint">
-                  更新包发布在 GitHub Releases（f891127/zhimail）。客户端通过 latest.yml 比对版本后下载安装包。
-                  若提示连接超时，通常是本机网络无法直连 GitHub，可切换到镜像地址后重试。
+                  更新清单与安装包默认由 Manus 托管（GitHub 仅作为代码仓库），客户端通过 latest.yml 比对版本后下载安装包并校验 SHA-512。
+                  若提示连接超时，可切到 GitHub 官方源或第三方镜像后重试。
                 </p>
               </div>
             )}

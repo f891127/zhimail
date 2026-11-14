@@ -43,7 +43,7 @@ import {
   openDownloadedInstaller,
   speedTestFeeds,
   testUpdateSource,
-  RELEASE_URL,
+  DOWNLOAD_PAGE_URL,
 } from './services/updater';
 import {
   analyzeRange,
@@ -1112,7 +1112,7 @@ export function registerIpcHandlers(): void {
   // 便携版等无法自动安装时，直接打开发布页手动下载
   ipcMain.handle('update/openRelease', async () => {
     const { shell } = await import('electron');
-    await shell.openExternal(RELEASE_URL);
+    await shell.openExternal(DOWNLOAD_PAGE_URL);
     return true;
   });
 

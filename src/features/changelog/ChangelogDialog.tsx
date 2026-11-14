@@ -130,7 +130,7 @@ export function ChangelogDialog() {
         </div>
 
         <div className="flex shrink-0 items-center gap-2 border-t border-shell-line bg-[#fafbfc] px-4 py-2">
-          <span className="text-[11px] text-shell-faint">发布记录：github.com/f891127/zhimail/releases</span>
+          <span className="text-[11px] text-shell-faint">下载与更新：zhiyou-emy2c9va.manus.space</span>
           <button
             type="button"
             onClick={closeChangelog}
