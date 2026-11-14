@@ -169,9 +169,12 @@ function renderNotes(markdown) {
 
 const mb = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 const publishedAt = releaseDate.slice(0, 10);
+/** 下载箭头图标：两个下载按钮共用 */
+const DOWNLOAD_ICON =
+  '<svg class="btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12" /><path d="m7 11 5 5 5-5" /><path d="M4 20h16" /></svg>';
 const portableLine = portablePath
   ? `<a class="btn btn-ghost" href="${portableUrl}">
-            下载便携版
+            <span class="btn-row">${DOWNLOAD_ICON}<span>下载便携版</span></span>
             <small>Windows x64 · ${mb(fs.statSync(portablePath).size)} · .zip 免安装</small>
           </a>`
   : '';
@@ -229,19 +232,27 @@ const page = `<!doctype html>
       .btn {
         display: inline-flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 3px;
         text-decoration: none;
         border-radius: 10px;
         padding: 12px 20px;
         font-size: 15px;
         font-weight: 600;
         border: 1px solid transparent;
-        transition: transform .12s ease, box-shadow .12s ease;
+        transition: transform .12s ease, box-shadow .12s ease, background-color .12s ease, border-color .12s ease, color .12s ease;
       }
+      .btn-row { display: flex; align-items: center; gap: 7px; }
+      .btn-ico { width: 15px; height: 15px; flex: none; }
       .btn:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(16, 24, 40, .12); }
+      .btn:active { transform: translateY(0); box-shadow: 0 2px 6px rgba(16, 24, 40, .16); }
+      .btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
       .btn small { font-weight: 400; font-size: 12px; opacity: .78; }
       .btn-primary { background: var(--brand); color: #fff; }
+      .btn-primary:hover { background: var(--brand-dark); }
+      .btn-primary:active { background: #1a45a6; }
       .btn-ghost { background: #fff; color: var(--text); border-color: var(--line); }
+      .btn-ghost:hover { background: #f2f6ff; border-color: var(--brand); color: var(--brand-dark); }
+      .btn-ghost:active { background: #e4ecff; border-color: var(--brand-dark); color: var(--brand-dark); }
       h2 { font-size: 16px; margin: 0 0 12px; }
       ul.notes { margin: 0; padding-left: 18px; color: #33383f; font-size: 14.5px; }
       ul.notes li { margin-bottom: 6px; }
@@ -275,7 +286,7 @@ const page = `<!doctype html>
         </div>
         <div class="actions">
           <a class="btn btn-primary" href="${setupUrl}">
-            下载安装版
+            <span class="btn-row">${DOWNLOAD_ICON}<span>下载安装版</span></span>
             <small>Windows x64 · ${mb(setupSize)} · .exe</small>
           </a>
           ${portableLine}

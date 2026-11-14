@@ -260,11 +260,15 @@ export class Store {
           brief.group && brief.group !== 'briefs' ? { ...brief, group: 'briefs' } : brief,
         );
         // 旧版本默认走 GitHub Releases，国内直连常常超时：未自定义地址的一律迁移到 Manus 托管源
-        if (
-          this.state.settings.update?.source === 'github' &&
-          !(this.state.settings.update?.customUrl ?? '').trim()
-        ) {
-          this.state.settings.update = { ...this.state.settings.update, source: 'manus' };
+        const updateSettings = this.state.settings.update;
+        if (updateSettings) {
+          const custom = (updateSettings.customUrl ?? '').trim();
+          if (updateSettings.source === 'github' && !custom) {
+            this.state.settings.update = { ...updateSettings, source: 'manus' };
+          } else if (updateSettings.source === 'custom' && /manus\.space\/updates/i.test(custom)) {
+            // 自定义地址填的就是 Manus 托管源时归位为内置源，界面上直接显示「Manus 托管源」
+            this.state.settings.update = { ...updateSettings, source: 'manus' };
+          }
         }
       } catch (error) {
         console.error('[store] state.json 解析失败，使用空状态重建', error);
